@@ -10,7 +10,7 @@ import type { CliContext } from "../src/core/context";
 
 const dirs: string[] = [];
 function tmpHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "vcli-loader-"));
+  const dir = mkdtempSync(join(tmpdir(), "v-cli-loader-"));
   dirs.push(dir);
   return dir;
 }

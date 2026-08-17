@@ -20,7 +20,7 @@ export function createContext(homeDir: string, json: boolean): CliContext {
   };
 }
 
-/** 默认主目录 ~/.vcli，VCLI_HOME 可覆盖（测试/多配置） */
+/** 默认主目录 ~/.v-cli，V_CLI_HOME 可覆盖（测试/多配置） */
 export function defaultHomeDir(): string {
-  return process.env.VCLI_HOME || path.join(os.homedir(), ".vcli");
+  return process.env.V_CLI_HOME || path.join(os.homedir(), ".v-cli");
 }

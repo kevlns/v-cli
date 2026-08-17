@@ -12,7 +12,7 @@ async function main(): Promise<number> {
 
   const program = new Command();
   program
-    .name("vcli")
+    .name("v-cli")
     .description("kevlns 的个人工具箱")
     .version(VERSION)
     .option("--json", "输出机器可读 JSON")
@@ -45,7 +45,7 @@ async function main(): Promise<number> {
 main().then(
   (code) => process.exit(code),
   (err) => {
-    process.stderr.write(`[vcli] 未捕获异常: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
+    process.stderr.write(`[v-cli] 未捕获异常: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
     process.exit(1);
   },
 );

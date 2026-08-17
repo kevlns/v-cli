@@ -14,14 +14,14 @@ export class Logger {
   }
 
   info(msg: string): void {
-    process.stderr.write(`[vcli] ${msg}\n`);
+    process.stderr.write(`[v-cli] ${msg}\n`);
   }
 
   warn(msg: string): void {
-    process.stderr.write(`[vcli] 警告: ${msg}\n`);
+    process.stderr.write(`[v-cli] 警告: ${msg}\n`);
   }
 
   error(msg: string): void {
-    process.stderr.write(`[vcli] 错误: ${msg}\n`);
+    process.stderr.write(`[v-cli] 错误: ${msg}\n`);
   }
 }

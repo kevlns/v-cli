@@ -9,7 +9,7 @@ import { VERSION } from "../version";
 /** 环境体检：永远成功退出，问题体现在数据里 */
 export const doctor: CliCommand = {
   name: "doctor",
-  description: "体检：node/vcli 版本、homeDir、config、插件状态",
+  description: "体检：node/v-cli 版本、homeDir、config、插件状态",
 
   register(program: Command, ctx: CliContext) {
     program.action(async () => {

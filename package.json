@@ -4,7 +4,7 @@
   "description": "kevlns 的个人工具箱 CLI（插件化架构，内置 + 本地插件）+ doctor/plugin/ts 命令",
   "type": "module",
   "bin": {
-    "vcli": "dist/cli.mjs"
+    "v-cli": "dist/cli.mjs"
   },
   "files": [
     "dist/"

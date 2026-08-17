@@ -8,7 +8,7 @@ const CLI = resolve(__dirname, "../dist/cli.mjs");
 const homes: string[] = [];
 
 function newHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "vcli-it-"));
+  const home = mkdtempSync(join(tmpdir(), "v-cli-it-"));
   homes.push(home);
   return home;
 }
@@ -16,7 +16,7 @@ function newHome(): string {
 function run(args: string[], home: string): string {
   return execFileSync(process.execPath, [CLI, ...args], {
     encoding: "utf-8",
-    env: { ...process.env, VCLI_HOME: home },
+    env: { ...process.env, V_CLI_HOME: home },
   });
 }
 

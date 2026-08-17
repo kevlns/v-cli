@@ -1,4 +1,4 @@
-# vcli
+# v-cli
 
 kevlns 的个人工具箱 CLI。TypeScript + Node，插件化架构：内置命令随版本发布，本地插件放目录即生效。
 
@@ -16,19 +16,19 @@ npm install -g @kevlns/v-cli
 
 ```bash
 # 环境体检
-vcli doctor
+v-cli doctor
 
 # 列出所有命令（内置 + 本地插件）
-vcli plugin list
+v-cli plugin list
 
 # 时间戳工具：当前时间 / 时间戳转可读 / 日期串转时间戳
-vcli ts
-vcli ts 1710000000
-vcli ts "2024-03-09 16:00:00"
+v-cli ts
+v-cli ts 1710000000
+v-cli ts "2024-03-09 16:00:00"
 
 # 全局 --json 开关（任意位置），输出机器可读 JSON
-vcli doctor --json
-vcli ts 1710000000 --json
+v-cli doctor --json
+v-cli ts 1710000000 --json
 ```
 
 ## 架构
@@ -46,15 +46,15 @@ src/
 └── version.ts
 ```
 
-- 命令主目录默认 `~/.vcli`，环境变量 `VCLI_HOME` 可覆盖
+- 命令主目录默认 `~/.v-cli`，环境变量 `V_CLI_HOME` 可覆盖
 - 所有命令通过 `ctx` 获得 logger/config，行为全局一致；`--json` 由契约保证
 
 ## 本地插件
 
-把 `.mjs` 文件放入 `~/.vcli/commands/` 立即生效，无需发版：
+把 `.mjs` 文件放入 `~/.v-cli/commands/` 立即生效，无需发版：
 
 ```js
-// ~/.vcli/commands/hello.mjs
+// ~/.v-cli/commands/hello.mjs
 export default {
   name: "hello",
   description: "示例插件",

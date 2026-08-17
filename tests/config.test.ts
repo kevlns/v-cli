@@ -6,7 +6,7 @@ import { ConfigStore } from "../src/core/config";
 
 const dirs: string[] = [];
 function tmpHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "vcli-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "v-cli-test-"));
   dirs.push(dir);
   return dir;
 }
