@@ -5,9 +5,9 @@ kevlns 的个人工具箱 CLI。TypeScript + Node，插件化架构：内置命�
 ## 安装
 
 ```bash
-npm install -g git+https://github.com/kevlns/vcli.git
+npm install -g git+https://github.com/kevlns/v-cli.git
 # 发布 npm 后
-npm install -g vcli
+npm install -g @kevlns/v-cli
 ```
 
 要求：Node.js >= 18。无其他运行时依赖（commander 已打包进单文件产物）。

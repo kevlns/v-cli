@@ -21,12 +21,12 @@
   "author": "kevlns <936277610@qq.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kevlns/vcli.git"
+    "url": "git+https://github.com/kevlns/v-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/kevlns/vcli/issues"
+    "url": "https://github.com/kevlns/v-cli/issues"
   },
-  "homepage": "https://github.com/kevlns/vcli#readme",
+  "homepage": "https://github.com/kevlns/v-cli#readme",
   "private": true,
   "keywords": [
     "cli",
