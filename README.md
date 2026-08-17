@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./logo.png" alt="v-cli logo" width="320" />
+
 # v-cli
 
 **kevlns 的个人工具箱 CLI：插件化架构，内置命令随版本发布，本地插件放目录即生效。**
