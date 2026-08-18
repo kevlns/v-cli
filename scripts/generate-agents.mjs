@@ -241,7 +241,7 @@ function render(plugins, version) {
     lines.push("## 官方插件");
     lines.push("");
     lines.push("> 当前解析不到任何已安装的官方插件包（@kevlns/xlmerge / @kevlns/u-cli-mod 尚未安装）。");
-    lines.push("> 请安装后重新生成本文件：`npm install @kevlns/xlmerge@1.2.1-beta.2 @kevlns/u-cli-mod@0.1.0-beta.2`");
+    lines.push("> 请安装后重新生成本文件：`npm install @kevlns/xlmerge@1.2.1-beta.3 @kevlns/u-cli-mod@0.1.0-beta.3`");
     lines.push("> 或直接用实时索引：`v-cli agent index --json`（会列出官方插件与安装状态）。");
     lines.push("");
   } else {

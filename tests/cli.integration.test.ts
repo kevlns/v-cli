@@ -49,8 +49,8 @@ afterEach(() => {
 });
 
 describe("CLI 集成", () => {
-  it("--version 为 0.2.0-beta.2", () => {
-    expect(run(["--version"], newHome()).trim()).toBe("0.2.0-beta.2");
+  it("--version 为 0.2.0-beta.3", () => {
+    expect(run(["--version"], newHome()).trim()).toBe("0.2.0-beta.3");
   });
 
   it("--help 列出内置命令与官方插件命令", () => {
@@ -86,11 +86,11 @@ describe("CLI 集成", () => {
     const xl = data.officialPlugins.find((o: { name: string }) => o.name === "xlmerge");
     expect(xl).toBeTruthy();
     expect(xl.status).toBe("available");
-    expect(xl.version).toBe("1.2.1-beta.2");
+    expect(xl.version).toBe("1.2.1-beta.3");
     const unity = data.officialPlugins.find((o: { name: string }) => o.name === "unity");
     expect(unity).toBeTruthy();
     expect(unity.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
-    if (process.platform === "win32") expect(unity.version).toBe("0.1.0-beta.2");
+    if (process.platform === "win32") expect(unity.version).toBe("0.1.0-beta.3");
   });
 
   it("plugin list 包含内置命令与官方插件行（官方依赖已安装）", () => {
@@ -101,10 +101,10 @@ describe("CLI 集成", () => {
     expect(official.map((r: { name: string }) => r.name).sort()).toEqual(["unity", "xlmerge"]);
     const xl = official.find((r: { name: string }) => r.name === "xlmerge");
     expect(xl.status).toBe("available");
-    expect(xl.version).toBe("1.2.1-beta.2");
+    expect(xl.version).toBe("1.2.1-beta.3");
     const unity = official.find((r: { name: string }) => r.name === "unity");
     expect(unity.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
-    if (process.platform === "win32") expect(unity.version).toBe("0.1.0-beta.2");
+    if (process.platform === "win32") expect(unity.version).toBe("0.1.0-beta.3");
   });
 
   it("plugin list --json 在 fixture 下官方插件可用（win32 主机含 unity）", () => {
@@ -147,7 +147,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const out = run(["xlmerge", "detect"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.env).toEqual({
-      V_CLI_HOST_VERSION: "0.2.0-beta.2",
+      V_CLI_HOST_VERSION: "0.2.0-beta.3",
       V_CLI_PLUGIN_API: "1",
       V_CLI_INVOKED_BY: "v-cli",
     });
