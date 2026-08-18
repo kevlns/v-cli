@@ -160,10 +160,19 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     expect(r.status).toBe(42);
   });
 
-  it("unity 命令路由到 u-cli-mod 包（win32 主机可用）", () => {
+  it.skipIf(process.platform !== "win32")("unity 命令在 win32 路由到 u-cli-mod 包", () => {
     const out = run(["unity", "doctor", "proj"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.argv).toEqual(["doctor", "proj"]);
+  });
+
+  it.skipIf(process.platform === "win32")("unity 命令在非 win32 平台 fail-closed", () => {
+    const r = runWithStatus(["unity", "doctor", "proj"], newHome(), {
+      V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT,
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("仅支持平台 [win32]");
+    expect(r.stderr).toContain(`当前平台为 ${process.platform}`);
   });
 
   it("官方插件不可用（resolveFrom 指向缺 manifest 的包）→ 非零退出 + stderr 解释", () => {
