@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { isCliCommand, type CliCommand } from "./command";
+import { validateLocalCommand, type CliCommand } from "./command";
 import type { CliContext } from "./context";
 import { builtinCommands } from "../commands";
 
@@ -17,7 +17,11 @@ export async function loadBuiltinCommands(): Promise<LoadedCommand[]> {
   return builtinCommands.map((command) => ({ command, source: "builtin" as const }));
 }
 
-/** 扫描 <home>/commands/*.mjs，动态 import；单个失败只记录不中断 */
+/**
+ * 扫描 <home>/commands/*.mjs，动态 import；单个失败只记录不中断。
+ * 每插件独立通过 validateLocalCommand（apiVersion 1 + 保留名 + 重复名），
+ * 失败项进入 error 列表，其余插件不受影响。
+ */
 export async function loadLocalPlugins(ctx: CliContext): Promise<LoadedCommand[]> {
   const dir = path.join(ctx.homeDir, "commands");
   const loaded: LoadedCommand[] = [];
@@ -28,12 +32,18 @@ export async function loadLocalPlugins(ctx: CliContext): Promise<LoadedCommand[]
     try {
       // @vite-ignore：外部文件运行时导入，阻止 vite 拦截（vitest 用 forks 池，见 vitest.config.ts）
       const mod = await import(/* @vite-ignore */ pathToFileURL(abs).href);
-      const cmd = mod.default ?? mod;
-      if (!isCliCommand(cmd)) {
-        loaded.push({ source: "local", file: abs, error: "默认导出不符合 CliCommand 契约" });
+      const candidate = mod.default ?? mod;
+      // 完整契约校验（apiVersion 1 + 形状 + 保留名/重复名 + agent 元数据），
+      // 失败项带解释性错误进入 error 列表；旧版插件在此得到 apiVersion 指引。
+      const acceptedNames = loaded
+        .map((l) => l.command?.name)
+        .filter((n): n is string => typeof n === "string");
+      const validation = validateLocalCommand(candidate, { existingNames: acceptedNames });
+      if (!validation.ok || !validation.command) {
+        loaded.push({ source: "local", file: abs, error: validation.errors.join("；") });
         continue;
       }
-      loaded.push({ command: cmd, source: "local", file: abs });
+      loaded.push({ command: validation.command, source: "local", file: abs });
     } catch (err) {
       loaded.push({
         source: "local",

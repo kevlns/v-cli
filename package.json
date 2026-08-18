@@ -1,21 +1,29 @@
 {
-  "name": "vcli",
-  "version": "0.1.0",
+  "name": "@kevlns/v-cli",
+  "version": "0.2.0-beta.2",
   "description": "kevlns 的个人工具箱 CLI（插件化架构，内置 + 本地插件）+ doctor/plugin/ts 命令",
   "type": "module",
   "bin": {
     "v-cli": "dist/cli.mjs"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "schemas/",
+    "AGENTS.md"
   ],
   "scripts": {
     "build": "tsup",
+    "prepack": "npm run build",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "generate:agents": "node scripts/generate-agents.mjs",
+    "check:agents": "node scripts/generate-agents.mjs --check",
+    "pack:guard": "node scripts/pack-guard.mjs",
+    "test:package": "node scripts/test-package-install.mjs",
+    "check": "npm run build && npm run typecheck && npm test && npm run check:agents && npm run pack:guard"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "license": "MIT",
   "author": "kevlns <936277610@qq.com>",
@@ -27,19 +35,27 @@
     "url": "https://github.com/kevlns/v-cli/issues"
   },
   "homepage": "https://github.com/kevlns/v-cli#readme",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "cli",
     "toolbox",
     "personal"
   ],
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "@kevlns/xlmerge": "1.2.1-beta.2",
+    "@kevlns/u-cli-mod": "0.1.0-beta.2"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "esbuild@0.27.2": true
   }
 }

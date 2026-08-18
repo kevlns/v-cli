@@ -2,3 +2,7 @@ node_modules/
 dist/
 *.tgz
 .vcli/
+# 测试 fixture 的官方插件安装布局，必须纳入版本库
+!tests/fixtures/installed/node_modules/
+!tests/fixtures/installed/node_modules/@kevlns/u-cli-mod/dist/
+!tests/fixtures/broken/node_modules/

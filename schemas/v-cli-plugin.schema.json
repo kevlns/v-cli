@@ -1,0 +1,144 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kevlns/v-cli/schemas/v-cli-plugin.schema.json",
+  "title": "v-cli plugin manifest",
+  "description": "官方插件清单（v-cli.plugin.json）契约，schemaVersion 1。v-cli 使用内置校验器（src/core/manifest.ts）执行等价规则；本文件供编辑器提示与文档使用。",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "package",
+    "command",
+    "bin",
+    "description",
+    "platforms",
+    "runtime",
+    "environment",
+    "agent"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "清单契约版本。v-cli 0.2 仅支持 1；未知 major（>=2）会被拒绝。"
+    },
+    "package": {
+      "type": "string",
+      "pattern": "^@[a-zA-Z0-9][a-zA-Z0-9._~-]*/[a-zA-Z0-9][a-zA-Z0-9._~-]*$",
+      "description": "npm 包名（@scope/name），必须与 package.json 的 name 一致。"
+    },
+    "command": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "v-cli 路由命令名。不可与内置命令（doctor/plugin/ts/agent/help）重名。"
+    },
+    "bin": {
+      "type": "string",
+      "description": "package.json bin 中的键名；由 v-cli 以子进程方式调用。"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["darwin", "linux", "win32"]
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "description": "运行时要求（node/python/os 等，自由形状）。"
+    },
+    "environment": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": ["whenToUse", "globalOptions", "commands"],
+      "properties": {
+        "whenToUse": {
+          "type": "string",
+          "description": "给 AI agent 的判断条件：什么场景该调用本插件。"
+        },
+        "globalOptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["flags", "description"],
+            "properties": {
+              "flags": { "type": "string", "minLength": 1 },
+              "description": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "usage", "description", "arguments", "options", "output", "exitCodes", "safety"],
+            "properties": {
+              "path": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+              },
+              "usage": { "type": "string", "minLength": 1 },
+              "description": { "type": "string", "minLength": 1 },
+              "arguments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "required", "description"],
+                  "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "required": { "type": "boolean" },
+                    "description": { "type": "string", "minLength": 1 }
+                  }
+                }
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["flags", "description"],
+                  "properties": {
+                    "flags": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string", "minLength": 1 }
+                  }
+                }
+              },
+              "output": {
+                "type": "object",
+                "required": ["format", "description"],
+                "properties": {
+                  "format": { "type": "string", "enum": ["json", "stdout", "text"] },
+                  "description": { "type": "string", "minLength": 1 }
+                }
+              },
+              "exitCodes": {
+                "type": "object",
+                "description": "code -> 含义 映射。",
+                "additionalProperties": { "type": "string" }
+              },
+              "safety": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

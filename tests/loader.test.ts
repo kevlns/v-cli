@@ -37,9 +37,10 @@ describe("loader", () => {
     expect(all.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("isCliCommand 形状校验", () => {
-    expect(isCliCommand({ name: "a", description: "b", register: () => {} })).toBe(true);
-    expect(isCliCommand({ name: 1, description: "b", register: () => {} })).toBe(false);
+  it("isCliCommand 形状校验（apiVersion === 1 是契约一部分）", () => {
+    expect(isCliCommand({ name: "a", description: "b", register: () => {}, apiVersion: 1 })).toBe(true);
+    expect(isCliCommand({ name: "a", description: "b", register: () => {} })).toBe(false);
+    expect(isCliCommand({ name: 1, description: "b", register: () => {}, apiVersion: 1 })).toBe(false);
     expect(isCliCommand(null)).toBe(false);
   });
 });

@@ -17,11 +17,21 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
+      # 依赖 @kevlns/xlmerge@1.2.1-beta.2 与 @kevlns/u-cli-mod@0.1.0-beta.2 已发布，
+      # npm ci 由 package-lock 完全锁定，无需 sibling 仓库。
       - name: Install deps
-        run: npm ci || npm install
+        run: npm ci
       - name: Build
         run: npm run build
       - name: Typecheck
         run: npm run typecheck
       - name: Test
         run: npm test
+      # AGENTS.md 漂移检查：默认与【已安装的官方依赖】比对（generate:agents 默认即
+      # installed-deps 模式），依赖发布安装后此步骤总是生效，不依赖 sibling 仓库存在。
+      - name: AGENTS.md drift check
+        run: npm run check:agents
+      - name: Pack guard
+        run: npm run pack:guard
+      - name: Package install smoke (global install + run)
+        run: npm run test:package

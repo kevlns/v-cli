@@ -26,11 +26,14 @@ function parseInput(input: string): { seconds: number; milliseconds: number; raw
 export const ts: CliCommand = {
   name: "ts",
   description: "时间戳工具：时间戳 <-> 可读时间互转",
+  apiVersion: 1,
 
   register(program: Command, ctx: CliContext) {
     program
       .argument("[value]", "数字时间戳（秒或毫秒，自动识别）或日期字符串")
-      .action((value?: string) => {
+      .option("--json", "输出机器可读 JSON")
+      .action((value: string | undefined, opts: { json?: boolean }) => {
+        const json = ctx.json || opts.json;
         if (!value || value === "now") {
           const now = Date.now();
           const report = {
@@ -39,7 +42,7 @@ export const ts: CliCommand = {
             iso: new Date(now).toISOString(),
             local: new Date(now).toString(),
           };
-          ctx.log.result(ctx.json ? report : report.iso);
+          ctx.log.result(json ? report : report.iso);
           return;
         }
         const result = parseInput(value);
@@ -50,7 +53,7 @@ export const ts: CliCommand = {
           iso: new Date(result.milliseconds).toISOString(),
           local: formatTime(result.milliseconds),
         };
-        ctx.log.result(ctx.json ? report : report.local);
+        ctx.log.result(json ? report : report.local);
       });
   },
 };
