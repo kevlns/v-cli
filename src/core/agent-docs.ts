@@ -13,6 +13,7 @@ import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "../version";
+import { defaultResolvePackage, OFFICIAL_PLUGINS } from "./official";
 
 /** 随包发布的引导文档文件名（package.json files 已包含） */
 export const BUNDLED_DOCS_FILE = "AGENTS.md";
@@ -28,6 +29,17 @@ export interface BundledDocs {
   sha256: string;
   /** UTF-8 字节数 */
   bytes: number;
+}
+
+export interface OfficialAgentDocs extends BundledDocs {
+  package: string;
+  command: string;
+  version: string;
+}
+
+export interface ReadOfficialAgentsMdOptions {
+  /** 注入 package.json 解析器（测试/fixture）；默认复用 official 插件发现策略。 */
+  resolvePackage?: (pkg: string) => string | undefined;
 }
 
 export interface ResolveBundledAgentsMdOptions {
@@ -113,6 +125,69 @@ export function readBundledAgentsMd(opts: ResolveBundledAgentsMdOptions = {}): B
     );
   }
   return {
+    file,
+    content,
+    sha256: sha256Hex(content),
+    bytes: Buffer.byteLength(content, "utf-8"),
+  };
+}
+
+/**
+ * 读取已安装官方插件包根的 AGENTS.md。
+ * 文档发现不受插件平台限制：例如 Linux 上仍可阅读仅 win32 可执行的 unity 规范。
+ */
+export function readOfficialAgentsMd(
+  command: string,
+  opts: ReadOfficialAgentsMdOptions = {},
+): OfficialAgentDocs {
+  const spec = OFFICIAL_PLUGINS.find((item) => item.command === command);
+  if (!spec) {
+    throw new Error(
+      `未找到官方插件命令: ${command}。请先运行 v-cli agent index --json 查看可用官方插件。`,
+    );
+  }
+  const resolvePackage = opts.resolvePackage ?? defaultResolvePackage;
+  const pkgJsonPath = resolvePackage(spec.package);
+  if (!pkgJsonPath) {
+    throw new Error(
+      `未安装官方插件包 ${spec.package}（命令 ${command}），或它不在可解析路径。请先安装后重试。`,
+    );
+  }
+
+  let pkgJson: { name?: unknown; version?: unknown };
+  try {
+    pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8")) as {
+      name?: unknown;
+      version?: unknown;
+    };
+  } catch (err) {
+    throw new Error(
+      `无法读取官方插件 ${spec.package} 的 package.json（${pkgJsonPath}）: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+  if (pkgJson.name !== spec.package || typeof pkgJson.version !== "string") {
+    throw new Error(`官方插件 package.json 身份无效: 期望 ${spec.package} 且 version 为字符串。`);
+  }
+
+  const file = path.join(path.dirname(pkgJsonPath), BUNDLED_DOCS_FILE);
+  let content: string;
+  try {
+    if (!fs.lstatSync(file).isFile()) throw new Error("目标不是普通文件");
+    content = fs.readFileSync(file, "utf-8");
+  } catch (err) {
+    throw new Error(
+      `官方插件 ${spec.package}@${pkgJson.version} 未提供可读的 ${BUNDLED_DOCS_FILE}（${file}）: ${
+        err instanceof Error ? err.message : String(err)
+      }。请升级或重新安装该插件。`,
+    );
+  }
+
+  return {
+    package: spec.package,
+    command,
+    version: pkgJson.version,
     file,
     content,
     sha256: sha256Hex(content),

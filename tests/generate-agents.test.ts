@@ -98,14 +98,15 @@ describe("generate-agents.mjs", () => {
     expect(content).toContain("`v-cli alpha …`");
     expect(content).toContain("`v-cli zeta …`");
     expect(content).toContain("何时使用 alpha");
+    expect(content).toContain("v-cli agent docs alpha");
+    expect(content).toContain("v-cli agent describe alpha --json");
+    expect(content).toContain("首次调用任何 official 插件命令前");
     expect(content).toContain("v-cli agent index --json");
   });
 
-  it("用法前缀改写为控制器形式，安全标签独立成行（确定性）", () => {
+  it("瘦索引只保留规范/实时元数据入口，不内联子命令与安全标签", () => {
     const dir = tmpDir();
-    // command 前缀：usage “alpha run” -> “v-cli alpha run”
     const m1 = writeManifest(dir, "m1", "@kevlns/aaa", "alpha");
-    // bin 前缀：command=unity、bin=u-cli-mod，usage “u-cli-mod doctor <p>” -> “v-cli unity doctor <p>”
     const m2 = writeManifest(dir, "m2", "@kevlns/bbb", "unity", {
       bin: "u-cli-mod",
       usage: "u-cli-mod doctor <project> [options]",
@@ -114,10 +115,13 @@ describe("generate-agents.mjs", () => {
     const r = runGenerator(["--manifest", m1, "--manifest", m2, "--output", out]);
     expect(r.status).toBe(0);
     const content = fs.readFileSync(out, "utf-8");
-    expect(content).toContain("用法：`v-cli alpha run`");
-    expect(content).toContain("用法：`v-cli unity doctor <project> [options]`");
-    expect(content).toContain("安全标签：read-only");
-    expect(content).not.toContain("`alpha run`");
+    expect(content).toContain("v-cli agent docs alpha");
+    expect(content).toContain("v-cli agent docs unity");
+    expect(content).toContain("v-cli agent describe alpha --json");
+    expect(content).toContain("v-cli agent describe unity --json");
+    expect(content).not.toContain("用法：");
+    expect(content).not.toContain("安全标签：read-only");
+    expect(content).not.toContain("alpha run");
     expect(content).not.toContain("u-cli-mod doctor");
   });
 
@@ -175,14 +179,15 @@ describe("generate-agents.mjs", () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("sibling 清单回退");
     const content = fs.readFileSync(path.join(repoDir, "AGENTS.md"), "utf-8");
-    // 两个插件齐全、带版本行、命令路由改写为控制器形式、安全标签独立成行
+    // 两个插件齐全、带版本行与按需文档/实时参数入口，不内联命令树
     expect(content).toContain("**版本**：1.2.1-beta.2");
     expect(content).toContain("**版本**：0.1.0-beta.2");
-    expect(content).toContain("`v-cli xlmerge --repo <r> detect`");
-    expect(content).toContain("`v-cli unity doctor <p>`");
-    expect(content).toContain("安全标签：read-only");
-    expect(content).not.toContain("`xlmerge --repo <r> detect`");
-    expect(content).not.toContain("`u-cli-mod doctor`");
+    expect(content).toContain("v-cli agent docs xlmerge");
+    expect(content).toContain("v-cli agent docs unity");
+    expect(content).toContain("v-cli agent describe xlmerge --json");
+    expect(content).not.toContain("xlmerge --repo <r> detect");
+    expect(content).not.toContain("u-cli-mod doctor");
+    expect(content).not.toContain("安全标签：read-only");
     // 复位后第二次运行字节一致（确定性）
     const r2 = spawnSync(process.execPath, [GENERATOR], { cwd: repoDir, encoding: "utf-8" });
     expect(r2.status).toBe(0);

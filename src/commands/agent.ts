@@ -10,6 +10,7 @@ import {
   BUNDLED_DOCS_PACKAGE,
   performAgentInit,
   readBundledAgentsMd,
+  readOfficialAgentsMd,
   type BundledDocs,
 } from "../core/agent-docs";
 import { VERSION } from "../version";
@@ -145,7 +146,7 @@ const AGENT_HELP_TEXT = [
   "agent 子命令一览：",
   "  index    列出全部命令（builtin/local/official）与 agent 元数据；--json 输出稳定 JSON 数组",
   "  describe 查看单个命令的完整记录（用法/参数/选项/输出/退出码/安全标签）；--json 输出单条记录",
-  "  docs     输出当前 @kevlns/v-cli 包内置 AGENTS.md 原文；--json 输出 { package, version, sha256, content }",
+  "  docs     无参输出 v-cli AGENTS.md；传 <command> 输出已安装官方插件包内 AGENTS.md",
   "  init     把内置 AGENTS.md 写入工作区（默认当前目录）；已存在默认拒绝，--force 覆盖，--dry-run 预览",
   "",
   "JSON：所有子命令支持 --json（或前置全局 --json，如 v-cli --json agent index）",
@@ -159,26 +160,30 @@ const AGENT_HELP_TEXT = [
   "示例：",
   "  v-cli agent index --json            # 全量命令索引",
   "  v-cli agent describe ts --json      # 单命令详情",
-  "  v-cli agent docs                    # 内置引导文档原文",
+  "  v-cli agent docs                    # v-cli 瘦索引原文",
+  "  v-cli agent docs unity              # u-cli-mod 包内使用规范",
+  "  v-cli agent docs xlmerge --json     # xlmerge 包内规范（JSON）",
   "  v-cli agent init . --dry-run        # 预览初始化目标",
 ].join("\n");
 
 const DOCS_HELP_TEXT = [
-  "输出当前安装的 @kevlns/v-cli 包内置 AGENTS.md 原文（AI Agent 引导文档），逐字节原样输出、不追加换行。",
+  "输出 AGENTS.md 原文（逐字节原样输出、不追加换行）。",
+  "  省略 [command]：当前 @kevlns/v-cli 包内置瘦索引。",
+  "  传入 [command]：已安装官方插件包根 AGENTS.md（如 unity / xlmerge）。",
+  "",
+  "参数：",
+  "  [command]  official 插件命令名；先用 v-cli agent index --json 查看",
   "",
   "JSON 行为（--json 或前置全局 --json）：",
   "  成功：stdout 输出稳定对象 { package, version, sha256, content }",
-  "    package  包名 @kevlns/v-cli",
-  "    version  当前包版本",
-  "    sha256   content 的 SHA-256（hex），可校验引导文档未被篡改",
-  "    content  AGENTS.md 原文",
   "  失败：stdout 输出稀疏对象 { ok: false, error }，stderr 再输出同一 error，退出码 1",
   "",
-  "退出码：0 成功；1 内置 AGENTS.md 缺失/不可读",
+  "退出码：0 成功；1 命令未知 / 插件未安装 / AGENTS.md 缺失或不可读",
   "",
   "示例：",
   "  v-cli agent docs",
-  "  v-cli agent docs --json",
+  "  v-cli agent docs unity",
+  "  v-cli agent docs xlmerge --json",
 ].join("\n");
 
 const INIT_HELP_TEXT = [
@@ -245,15 +250,15 @@ export const agent: CliCommand = {
       },
       {
         path: ["docs"],
-        usage: "v-cli agent docs [--json]",
-        description: "输出当前 @kevlns/v-cli 包内置 AGENTS.md 原文",
-        arguments: [],
+        usage: "v-cli agent docs [command] [--json]",
+        description: "无参输出 v-cli AGENTS.md；传 command 输出官方插件包内 AGENTS.md",
+        arguments: [{ name: "command", required: false, description: "官方插件命令名（如 unity、xlmerge）" }],
         options: [{ flags: "--json", description: "输出 { package, version, sha256, content }" }],
         output: {
           format: "stdout",
           description: "AGENTS.md 原文逐字节输出到 stdout；--json 时输出含 sha256/content 的稳定 JSON",
         },
-        exitCodes: { "0": "成功", "1": "内置 AGENTS.md 缺失/不可读" },
+        exitCodes: { "0": "成功", "1": "命令未知 / 插件未安装 / AGENTS.md 缺失或不可读" },
         safety: ["read-only", "no-network"],
       },
       {
@@ -345,14 +350,24 @@ export const agent: CliCommand = {
 
     program
       .command("docs")
-      .description("输出当前 @kevlns/v-cli 包内置 AGENTS.md 原文（AI Agent 引导文档）")
+      .description("无参输出 v-cli AGENTS.md；传 command 输出官方插件包内 AGENTS.md")
+      .argument("[command]", "官方插件命令名（如 unity、xlmerge）")
       .option("--json", "输出机器可读 JSON（含 sha256/content）")
       .addHelpText("after", DOCS_HELP_TEXT)
-      .action((opts: { json?: boolean }) => {
+      .action((command: string | undefined, opts: { json?: boolean }) => {
         const json = ctx.json || opts.json;
         let docs: BundledDocs;
+        let packageName = BUNDLED_DOCS_PACKAGE;
+        let version = VERSION;
         try {
-          docs = readBundledAgentsMd();
+          if (command) {
+            const pluginDocs = readOfficialAgentsMd(command);
+            docs = pluginDocs;
+            packageName = pluginDocs.package;
+            version = pluginDocs.version;
+          } else {
+            docs = readBundledAgentsMd();
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           if (json) ctx.log.result({ ok: false, error: message });
@@ -362,8 +377,8 @@ export const agent: CliCommand = {
         }
         if (json) {
           ctx.log.result({
-            package: BUNDLED_DOCS_PACKAGE,
-            version: VERSION,
+            package: packageName,
+            version,
             sha256: docs.sha256,
             content: docs.content,
           });

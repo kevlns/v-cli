@@ -3,9 +3,9 @@
  * test:package — 发布后安装冒烟测试（真实 npm 全局安装）。
  *
  * 流程：npm pack 生成 tgz → 在隔离临时 prefix 中做一次真实 `npm install --global`，
- * 官方依赖 @kevlns/xlmerge@1.2.1-beta.3 / @kevlns/u-cli-mod@0.1.0-beta.3 由 registry
+ * 官方依赖 @kevlns/xlmerge@1.2.1-beta.5 / @kevlns/u-cli-mod@0.1.0-beta.4 由 registry
  * 正常解析安装 → 通过 npm 生成的 bin wrapper（非直接运行 dist/cli.mjs）执行 CLI，断言：
- *   - `--version` 为 0.2.0-beta.3；
+ *   - `--version` 为 0.2.0-beta.4；
  *   - `plugin list --json` 报告 xlmerge available；unity 在 win32 为 available、
  *     非 win32 为 platform-mismatch；
  *   - `agent index --json` / `agent describe --json` 暴露官方清单全量元数据
@@ -30,9 +30,9 @@ import { createHash } from "node:crypto";
 
 const ROOT = process.cwd();
 const IS_WIN = process.platform === "win32";
-const VERSION = "0.2.0-beta.3";
-const XL_VERSION = "1.2.1-beta.3";
-const UNITY_VERSION = "0.1.0-beta.3";
+const VERSION = "0.2.0-beta.4";
+const XL_VERSION = "1.2.1-beta.5";
+const UNITY_VERSION = "0.1.0-beta.4";
 const STREAM_CAP = 4000;
 
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -279,6 +279,18 @@ function smoke(filename) {
     );
     assert(docsJson.content === installedDocs, "agent docs --json content 与安装包内 AGENTS.md 不一致");
     assert(docsJson.sha256 === sha256(installedDocs), "agent docs --json sha256 与 content 不一致");
+    const xlDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "xlmerge", "--json"], runOpts));
+    assert(
+      xlDocs.package === "@kevlns/xlmerge" && xlDocs.version === XL_VERSION,
+      `agent docs xlmerge 身份 = ${xlDocs.package}@${xlDocs.version}`,
+    );
+    assert(xlDocs.content.includes("不默认走无头自动合并"), "xlmerge AGENTS.md 缺少 UI-first 规范");
+    const unityDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "unity", "--json"], runOpts));
+    assert(
+      unityDocs.package === "@kevlns/u-cli-mod" && unityDocs.version === UNITY_VERSION,
+      `agent docs unity 身份 = ${unityDocs.package}@${unityDocs.version}`,
+    );
+    assert(unityDocs.content.includes("首次对某工程执行 `exec` 前"), "u-cli-mod AGENTS.md 缺少首次就绪规范");
     const topHelp = cliExpectOk(prefix, ["--help"], runOpts);
     for (const line of [
       "AI Agent 快速开始",
@@ -292,7 +304,7 @@ function smoke(filename) {
     const agentHelp = cliExpectOk(prefix, ["agent", "--help"], runOpts);
     assert(agentHelp.includes("docs") && agentHelp.includes("init"), "安装版 agent --help 缺少 docs/init");
     const docsHelp = cliExpectOk(prefix, ["agent", "docs", "--help"], runOpts);
-    for (const line of ["sha256", "v-cli agent docs --json"]) {
+    for (const line of ["sha256", "v-cli agent docs xlmerge --json"]) {
       assert(docsHelp.includes(line), `安装版 agent docs --help 缺少 ${line}`);
     }
     const initHelp = cliExpectOk(prefix, ["agent", "init", "--help"], runOpts);

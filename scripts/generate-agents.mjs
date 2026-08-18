@@ -167,6 +167,8 @@ function renderCore(plugins, version) {
   lines.push("- 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看");
   lines.push("- AI Agent 引导文档：`v-cli agent docs` 输出本文件原文（`--json` 含 sha256/content）；");
   lines.push("  `v-cli agent init .` 把它写入工作区（已存在默认拒绝，`--force` 覆盖，`--dry-run` 预览；符号链接目标 fail-closed）");
+  lines.push("- **首次调用规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，");
+  lines.push("  掌握该插件包内 `AGENTS.md`；使用规范、快速流程与禁止事项以插件 AGENTS.md 为准。");
   lines.push("- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`）在子进程中运行（stdio 继承）：v-cli 只做路由，");
   lines.push("  不解析、不改写插件的 stdout/stderr；插件 `--help`/`--json` 等参数由插件自己消费");
   lines.push("- 插件对 worktree 的写入/提交行为以插件清单 v-cli.plugin.json 的 `agent.safety` 为准：");
@@ -211,26 +213,9 @@ function renderPlugin(plugin) {
     lines.push("");
     lines.push(`**何时使用**：${plugin.whenToUse}`);
   }
-  const globals = plugin.globalOptions || [];
-  if (globals.length > 0) {
-    lines.push("");
-    lines.push("**全局选项**：");
-    for (const o of globals) {
-      lines.push(`- \`${o.flags}\` — ${o.description}`);
-    }
-  }
-  const commands = plugin.commands || [];
-  if (commands.length > 0) {
-    lines.push("");
-    lines.push("**子命令**：");
-    for (const c of commands) {
-      const usage = controllerUsage(plugin, c.usage);
-      lines.push(`- \`${c.path.join(" ")}\` — ${c.description}（用法：\`${usage}\`）`);
-      if (Array.isArray(c.safety) && c.safety.length > 0) {
-        lines.push("  - 安全标签：" + c.safety.join("；"));
-      }
-    }
-  }
+  lines.push("");
+  lines.push(`**首次调用前必读**：\`v-cli agent docs ${plugin.command}\`（插件包内 AGENTS.md 规范正本）`);
+  lines.push(`**实时参数/命令**：\`v-cli agent describe ${plugin.command} --json\``);
   lines.push("");
   return lines;
 }
@@ -241,7 +226,7 @@ function render(plugins, version) {
     lines.push("## 官方插件");
     lines.push("");
     lines.push("> 当前解析不到任何已安装的官方插件包（@kevlns/xlmerge / @kevlns/u-cli-mod 尚未安装）。");
-    lines.push("> 请安装后重新生成本文件：`npm install @kevlns/xlmerge@1.2.1-beta.3 @kevlns/u-cli-mod@0.1.0-beta.3`");
+    lines.push("> 请安装后重新生成本文件：`npm install @kevlns/xlmerge@1.2.1-beta.5 @kevlns/u-cli-mod@0.1.0-beta.4`");
     lines.push("> 或直接用实时索引：`v-cli agent index --json`（会列出官方插件与安装状态）。");
     lines.push("");
   } else {

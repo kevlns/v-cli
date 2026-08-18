@@ -9,6 +9,7 @@ import {
   bundledCandidatePaths,
   performAgentInit,
   readBundledAgentsMd,
+  readOfficialAgentsMd,
   resolveBundledAgentsMd,
   sha256Hex,
   type BundledDocs,
@@ -157,6 +158,38 @@ describe("agent-docs 解析器（base 注入，无全局路径假设）", () => 
 
   it("sha256Hex 与已知向量一致", () => {
     expect(sha256Hex("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  });
+});
+
+describe("official 插件 AGENTS.md 解析", () => {
+  function fakeOfficialPackage(pkg: string, version: string, docs?: string): string {
+    const root = path.join(tmpDir(), "node_modules", ...pkg.split("/"));
+    fs.mkdirSync(root, { recursive: true });
+    const packageJson = path.join(root, "package.json");
+    fs.writeFileSync(packageJson, JSON.stringify({ name: pkg, version }), "utf-8");
+    if (docs !== undefined) fs.writeFileSync(path.join(root, "AGENTS.md"), docs, "utf-8");
+    return packageJson;
+  }
+
+  it("按官方 command 读取包根 AGENTS.md 并返回身份/哈希", () => {
+    const packageJson = fakeOfficialPackage("@kevlns/u-cli-mod", "9.9.9", "# unity norms\n");
+    const docs = readOfficialAgentsMd("unity", {
+      resolvePackage: (pkg) => (pkg === "@kevlns/u-cli-mod" ? packageJson : undefined),
+    });
+    expect(docs.package).toBe("@kevlns/u-cli-mod");
+    expect(docs.command).toBe("unity");
+    expect(docs.version).toBe("9.9.9");
+    expect(docs.content).toBe("# unity norms\n");
+    expect(docs.sha256).toBe(sha256Hex(docs.content));
+  });
+
+  it("未知命令 / 未安装 / 缺文档均给出清晰错误", () => {
+    expect(() => readOfficialAgentsMd("nope")).toThrow(/未找到官方插件命令/);
+    expect(() => readOfficialAgentsMd("xlmerge", { resolvePackage: () => undefined })).toThrow(/未安装官方插件包/);
+    const packageJson = fakeOfficialPackage("@kevlns/xlmerge", "1.0.0");
+    expect(() =>
+      readOfficialAgentsMd("xlmerge", { resolvePackage: () => packageJson }),
+    ).toThrow(/未提供可读的 AGENTS\.md/);
   });
 });
 
@@ -336,6 +369,33 @@ describe("CLI 集成：agent docs（dist 构建）", () => {
     const data = JSON.parse(r.stdout);
     expect(data.package).toBe("@kevlns/v-cli");
     expect(data.content).toBe(BUNDLED_CONTENT);
+  });
+
+  it("传 official command 输出已安装插件包根 AGENTS.md", () => {
+    const expected = fs.readFileSync(
+      resolve(REPO_ROOT, "node_modules", "@kevlns", "u-cli-mod", "AGENTS.md"),
+      "utf-8",
+    );
+    const r = runCli(["agent", "docs", "unity"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe(expected);
+    expect(r.stdout).toContain("使用规范（Agent 必须遵守）");
+  });
+
+  it("插件文档 --json 输出插件身份与自洽哈希", () => {
+    const r = runCli(["agent", "docs", "xlmerge", "--json"]);
+    expect(r.status).toBe(0);
+    const data = JSON.parse(r.stdout);
+    expect(data.package).toBe("@kevlns/xlmerge");
+    expect(data.version).toBe("1.2.1-beta.5");
+    expect(data.content).toContain("不默认走无头自动合并");
+    expect(sha256Hex(data.content)).toBe(data.sha256);
+  });
+
+  it("未知 official command 退出 1 并给出清晰错误", () => {
+    const r = runCli(["agent", "docs", "nope"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("未找到官方插件命令");
   });
 });
 
@@ -550,7 +610,7 @@ describe("CLI 集成：帮助面（AI Agent 快速开始）", () => {
   it("v-cli agent docs --help 含 JSON 行为/退出码/示例", () => {
     const r = runCli(["agent", "docs", "--help"]);
     expect(r.status).toBe(0);
-    for (const needle of ["sha256", "content", "退出码", "v-cli agent docs --json", "ok: false", "稀疏对象"]) {
+    for (const needle of ["sha256", "content", "退出码", "v-cli agent docs xlmerge --json", "ok: false", "稀疏对象"]) {
       expect(r.stdout).toContain(needle);
     }
   });
@@ -591,7 +651,12 @@ describe("CLI 集成：agent index/describe 元数据包含 docs/init", () => {
     const paths = agentRow.commands.map((c: { path: string[] }) => c.path.join(" "));
     expect(paths).toEqual(["index", "describe", "docs", "init"]);
     const docs = agentRow.commands.find((c: { path: string[] }) => c.path.join(" ") === "docs");
-    expect(docs.usage).toBe("v-cli agent docs [--json]");
+    expect(docs.usage).toBe("v-cli agent docs [command] [--json]");
+    expect(docs.arguments?.[0]).toEqual({
+      name: "command",
+      required: false,
+      description: "官方插件命令名（如 unity、xlmerge）",
+    });
     expect(docs.options?.[0].flags).toBe("--json");
     expect(docs.output.format).toBe("stdout");
     expect(docs.output.description).toContain("stdout");
