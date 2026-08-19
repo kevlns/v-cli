@@ -13,7 +13,41 @@ import {
   readOfficialAgentsMd,
   type BundledDocs,
 } from "../core/agent-docs";
+import {
+  performAgentSkillAssembly,
+  readSkillSource,
+  type SkillAssemblyTarget,
+} from "../core/agent-skill";
 import { VERSION } from "../version";
+
+/** agent init 的 skill 装配结果（并入 init 的 --json 输出） */
+type InitSkillOutcome =
+  | {
+      status: "assembled" | "skipped-none";
+      assembled: SkillAssemblyTarget[];
+      name: string;
+      sha256: string;
+      bytes: number;
+    }
+  | { status: "skipped-source-missing"; reason: string }
+  | { status: "skipped-init-failed" };
+
+/** skill 装配结果的文本摘要 */
+function skillOutcomeText(outcome: InitSkillOutcome, dryRun: boolean): string {
+  const verb = dryRun ? "将装配到" : "已装配到";
+  switch (outcome.status) {
+    case "assembled": {
+      const dirs = outcome.assembled.map((t) => t.dir).join(", ");
+      return `[skill v-cli] ${verb} ${outcome.assembled.length} 个 agent 目录：${dirs}`;
+    }
+    case "skipped-none":
+      return "[skill v-cli] 未检测到匹配的 agent 技能目录，跳过装配";
+    case "skipped-source-missing":
+      return `[skill v-cli] 跳过装配（源缺失）：${outcome.reason}`;
+    case "skipped-init-failed":
+      return "[skill v-cli] 跳过装配（AGENTS.md 未就绪）";
+  }
+}
 
 /** agent index 行：统一 builtin/local/official 三类命令的索引记录 */
 export interface AgentRowCommandMeta {
@@ -187,7 +221,8 @@ const DOCS_HELP_TEXT = [
 ].join("\n");
 
 const INIT_HELP_TEXT = [
-  "把当前 @kevlns/v-cli 包内置 AGENTS.md 原样写入 <目录>/AGENTS.md，AI Agent 会自动读取工作区文档。",
+  "把当前 @kevlns/v-cli 包内置 AGENTS.md 原样写入 <目录>/AGENTS.md，AI Agent 会自动读取工作区文档；",
+  "同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等，清单见 src/core/agent-dirs.ts），无匹配目录则跳过。",
   "",
   "参数：",
   "  [directory]  目标目录，默认当前工作目录；必须已存在且为目录",
@@ -264,7 +299,7 @@ export const agent: CliCommand = {
       {
         path: ["init"],
         usage: "v-cli agent init [directory] [--force] [--dry-run] [--json]",
-        description: "把内置 AGENTS.md 写入 <目录>/AGENTS.md；默认当前目录；已存在默认拒绝",
+        description: "初始化 <目录>：写入 AGENTS.md 并装配 v-cli skill 到匹配的 agent 技能目录；默认当前目录；已存在默认拒绝",
         arguments: [
           { name: "directory", required: false, description: "目标目录（默认当前工作目录；须已存在且为目录）" },
         ],
@@ -275,7 +310,7 @@ export const agent: CliCommand = {
         ],
         output: {
           format: "stdout",
-          description: "结果文本输出到 stdout；--json 时输出稳定 JSON（ok/dryRun/action/directory/target/package/version/sha256/bytes）",
+          description: "结果文本输出到 stdout；--json 时输出稳定 JSON（ok/dryRun/action/directory/target/package/version/sha256/bytes 及 skill 装配结果）",
         },
         exitCodes: {
           "0": "成功或干跑",
@@ -287,6 +322,7 @@ export const agent: CliCommand = {
           "fail-closed-symlink",
           "dry-run-supported",
           "no-commit",
+          "assembles-skill",
         ],
       },
     ],
@@ -409,16 +445,54 @@ export const agent: CliCommand = {
             process.exitCode = 1;
             return;
           }
+          const resolvedDir = path.resolve(directory ?? process.cwd());
           const result = performAgentInit({
-            directory: path.resolve(directory ?? process.cwd()),
+            directory: resolvedDir,
             docs,
             force: opts.force,
             dryRun: opts.dryRun,
             // 显式传入目录才做目录符号链接/联接 fail-closed；默认 cwd 不受限
             explicitDirectory: directory !== undefined,
           });
+
+          // skill 装配（额外职能）：仅在 init 成功后执行；源缺失降级为跳过，不阻断 init
+          let skillOutcome: InitSkillOutcome;
+          if (result.ok) {
+            try {
+              const source = readSkillSource();
+              const skill = performAgentSkillAssembly({
+                directory: resolvedDir,
+                source,
+                dryRun: opts.dryRun,
+              });
+              skillOutcome =
+                skill.assembled.length > 0
+                  ? {
+                      status: "assembled",
+                      assembled: skill.assembled,
+                      name: skill.skill.name,
+                      sha256: skill.skill.sha256,
+                      bytes: skill.skill.bytes,
+                    }
+                  : {
+                      status: "skipped-none",
+                      assembled: [],
+                      name: skill.skill.name,
+                      sha256: skill.skill.sha256,
+                      bytes: skill.skill.bytes,
+                    };
+            } catch (err) {
+              skillOutcome = {
+                status: "skipped-source-missing",
+                reason: err instanceof Error ? err.message : String(err),
+              };
+            }
+          } else {
+            skillOutcome = { status: "skipped-init-failed" };
+          }
+
           if (json) {
-            ctx.log.result(result);
+            ctx.log.result({ ...result, skill: skillOutcome });
             if (!result.ok && result.reason) ctx.log.error(result.reason);
             if (!result.ok) process.exitCode = 1;
             return;
@@ -428,15 +502,10 @@ export const agent: CliCommand = {
             process.exitCode = 1;
             return;
           }
-          if (result.dryRun) {
-            ctx.log.result(
-              `[dry-run] 将${result.action === "overwrite" ? "覆盖" : "写入"} ${result.target}（${result.bytes} 字节）`,
-            );
-          } else {
-            ctx.log.result(
-              `已${result.action === "overwritten" ? "覆盖" : "写入"} ${result.target}（${result.bytes} 字节，SHA-256 ${result.sha256.slice(0, 12)}…）`,
-            );
-          }
+          const head = result.dryRun
+            ? `[dry-run] 将${result.action === "overwrite" ? "覆盖" : "写入"} ${result.target}（${result.bytes} 字节）`
+            : `已${result.action === "overwritten" ? "覆盖" : "写入"} ${result.target}（${result.bytes} 字节，SHA-256 ${result.sha256.slice(0, 12)}…）`;
+          ctx.log.result([head, skillOutcomeText(skillOutcome, result.dryRun)].join("\n"));
         },
       );
 

@@ -12,6 +12,6 @@ describe("pack:guard 发布护栏", () => {
       encoding: "utf-8",
     });
     expect(out).toContain("pack:guard OK");
-    expect(out).toContain("@kevlns/v-cli@0.2.0-beta.4");
+    expect(out).toContain("@kevlns/v-cli@0.2.0");
   });
 });
