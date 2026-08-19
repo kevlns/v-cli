@@ -49,8 +49,8 @@ afterEach(() => {
 });
 
 describe("CLI 集成", () => {
-  it("--version 为 0.2.0", () => {
-    expect(run(["--version"], newHome()).trim()).toBe("0.2.0");
+  it("--version 为 0.2.1", () => {
+    expect(run(["--version"], newHome()).trim()).toBe("0.2.1");
   });
 
   it("--help 列出内置命令与官方插件命令", () => {
@@ -147,7 +147,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const out = run(["xlmerge", "detect"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.env).toEqual({
-      V_CLI_HOST_VERSION: "0.2.0",
+      V_CLI_HOST_VERSION: "0.2.1",
       V_CLI_PLUGIN_API: "1",
       V_CLI_INVOKED_BY: "v-cli",
     });
