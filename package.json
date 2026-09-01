@@ -1,6 +1,6 @@
 {
   "name": "@kevlns/v-cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "kevlns 的个人工具箱 CLI（插件化架构，内置 + 本地插件）+ doctor/plugin/ts 命令",
   "type": "module",
   "bin": {
@@ -46,9 +46,9 @@
     "personal"
   ],
   "dependencies": {
-    "commander": "^12.1.0",
+    "@kevlns/u-cli-mod": "0.1.3",
     "@kevlns/xlmerge": "1.2.1",
-    "@kevlns/u-cli-mod": "0.1.0"
+    "commander": "^12.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

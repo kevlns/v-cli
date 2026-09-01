@@ -30,7 +30,10 @@ function tmpDir(): string {
   return dir;
 }
 afterEach(() => {
-  for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
+  // Delete in reverse creation order: junction/symlink containers are created
+  // after their real targets. Removing the target first leaves a dangling
+  // Windows junction that fs.rmSync reports as ENOTEMPTY.
+  for (const d of dirs.splice(0).reverse()) fs.rmSync(d, { recursive: true, force: true });
 });
 
 function fakeDocs(content: string): BundledDocs {
