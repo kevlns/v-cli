@@ -390,7 +390,7 @@ describe("CLI 集成：agent docs（dist 构建）", () => {
     expect(r.status).toBe(0);
     const data = JSON.parse(r.stdout);
     expect(data.package).toBe("@kevlns/xlmerge");
-    expect(data.version).toBe("1.3.0");
+    expect(data.version).toBe("1.3.1");
     expect(data.content).toContain("不默认走无头自动合并");
     expect(sha256Hex(data.content)).toBe(data.sha256);
   });
