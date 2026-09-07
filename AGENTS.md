@@ -7,7 +7,7 @@
 
 ## 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.2.3
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.2.4
 - 命令分三类：builtin（内置）、local（~/.v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
   **最新、live 的命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
@@ -34,11 +34,11 @@
 
 ## @kevlns/xlmerge — 命令 `v-cli xlmerge …`
 
-**版本**：1.2.1
+**版本**：1.3.0
 **描述**：Visual resolver for Git merge conflicts in .xlsx/.xlsm planning tables: three-way sheet/row/cell diff, local UI, write-back and commit.
 **平台**：darwin, linux, win32
 
-**何时使用**：When a user asks to resolve Git merge conflicts in .xlsx/.xlsm planning or configuration tables (策划表/配置表冲突): run detect first; when count > 0 run launch and give the returned url to the user. Do not inspect workbook cells or summarize diffs yourself; the resolver owns diff, choices, write-back and commit.
+**何时使用**：When a user asks to resolve Git merge conflicts in .xlsx/.xlsm planning or configuration tables (策划表/配置表冲突): run detect first; when reviewCount > 0 run launch and give the returned url to the user. Configured auto-theirs filters may resolve and commit matched generated workbooks without opening the UI. Do not inspect workbook cells or summarize diffs yourself; the resolver owns diff, choices, write-back and commit.
 
 **首次调用前必读**：`v-cli agent docs xlmerge`（插件包内 AGENTS.md 规范正本）
 **实时参数/命令**：`v-cli agent describe xlmerge --json`
