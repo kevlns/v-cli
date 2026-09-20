@@ -148,7 +148,7 @@ describe("performAgentSkillAssembly（真实 IO，临时目录）", () => {
     expect(skillRoot).toBeTruthy();
   });
 
-  it("覆盖：已存在同内容 skill 目录 → overwrite=true 且整目录替换（清理多余文件）", () => {
+  it("覆盖：已存在同内容 skill 目录 → overwrite=true（随包没有的文件默认保留）", () => {
     const { base, content } = sourceFixture();
     const target = tmpDir();
     const skillDir = path.join(target, ".agent", "skill");
@@ -161,8 +161,8 @@ describe("performAgentSkillAssembly（真实 IO，临时目录）", () => {
     expect(result.assembled).toHaveLength(1);
     expect(result.assembled[0].overwrite).toBe(true);
     expect(fs.readFileSync(path.join(skillDir, SKILL_NAME, SKILL_FILE), "utf-8")).toBe(content);
-    // 覆盖是整目录替换：旧的多余文件被清掉
-    expect(fs.existsSync(path.join(skillDir, SKILL_NAME, "extra.txt"))).toBe(false);
+    // 项目扩展文件默认保留；--force 时才做完全同步（见下一条用例）
+    expect(fs.existsSync(path.join(skillDir, SKILL_NAME, "extra.txt"))).toBe(true);
   });
 
   it("无命中目录 → ok 且 assembled 为空（正常跳过，非错误）", () => {
@@ -217,63 +217,78 @@ describe("performAgentSkillAssembly（真实 IO，临时目录）", () => {
   });
 });
 
-describe("本地 skill 保护（避免随包版本降级项目正本）", () => {
-  function seedLocalSkill(target: string, content: string): string {
-    const dir = path.join(target, ".claude", "skills", SKILL_NAME);
+describe("随包版本权威：本地修改被刷新，项目扩展文件保留", () => {
+  function seedLocal(target: string, dirRel: string, skillContent: string): string {
+    const dir = path.join(target, dirRel, SKILL_NAME);
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, SKILL_FILE);
-    fs.writeFileSync(file, content, "utf-8");
+    fs.writeFileSync(file, skillContent, "utf-8");
     return file;
   }
 
-  it("目标内容与随包不同且未传 force → 保留本地版本，不写入", () => {
+  it("本地已修改 → 默认按随包版本刷新并标记 localModified", () => {
     const { base } = fakePackage();
     const src = readSkillSource({ base });
     const target = tmpDir();
-    const local = "---\nname: v-cli\n---\n# 项目侧正本\n";
-    const file = seedLocalSkill(target, local);
+    const file = seedLocal(target, ".claude/skills", "---\nname: v-cli\n---\n# 本地旧版\n");
 
     const result = performAgentSkillAssembly({ directory: target, source: src });
     expect(result.ok).toBe(true);
     expect(result.assembled).toHaveLength(1);
-    expect(result.assembled[0].action).toBe("kept");
-    expect(result.assembled[0].overwrite).toBe(false);
-    expect(fs.readFileSync(file, "utf-8")).toBe(local);
-  });
-
-  it("--force 时用随包版本覆盖本地版本", () => {
-    const { base } = fakePackage();
-    const src = readSkillSource({ base });
-    const target = tmpDir();
-    const file = seedLocalSkill(target, "---\nname: v-cli\n---\n# 项目侧正本\n");
-
-    const result = performAgentSkillAssembly({ directory: target, source: src, force: true });
     expect(result.assembled[0].action).toBe("assembled");
     expect(result.assembled[0].overwrite).toBe(true);
+    expect(result.assembled[0].localModified).toBe(true);
     expect(fs.readFileSync(file, "utf-8")).toBe(src.content);
   });
 
-  it("内容一致 → 正常覆盖（保持一致）", () => {
+  it("内容一致 → 覆盖但 localModified=false", () => {
     const { base } = fakePackage();
     const src = readSkillSource({ base });
     const target = tmpDir();
-    const file = seedLocalSkill(target, src.content);
+    seedLocal(target, ".claude/skills", src.content);
 
     const result = performAgentSkillAssembly({ directory: target, source: src });
-    expect(result.assembled[0].action).toBe("assembled");
     expect(result.assembled[0].overwrite).toBe(true);
-    expect(fs.readFileSync(file, "utf-8")).toBe(src.content);
+    expect(result.assembled[0].localModified).toBe(false);
   });
 
-  it("dry-run 下本地已修改 → action=kept 且不写入", () => {
+  it("项目扩展文件默认保留（随包没有的文件不被删除）", () => {
     const { base } = fakePackage();
     const src = readSkillSource({ base });
     const target = tmpDir();
-    const local = "---\nname: v-cli\n---\n# 项目侧正本\n";
-    const file = seedLocalSkill(target, local);
+    const dir = path.join(target, ".claude", "skills", SKILL_NAME);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "PROJECT.md"), "# 项目扩展\n", "utf-8");
+
+    performAgentSkillAssembly({ directory: target, source: src });
+    expect(fs.readFileSync(path.join(dir, "PROJECT.md"), "utf-8")).toBe("# 项目扩展\n");
+    expect(fs.readFileSync(path.join(dir, SKILL_FILE), "utf-8")).toBe(src.content);
+  });
+
+  it("--force → 完全同步，扩展文件被清掉", () => {
+    const { base } = fakePackage();
+    const src = readSkillSource({ base });
+    const target = tmpDir();
+    const dir = path.join(target, ".agent", "skill", SKILL_NAME);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, SKILL_FILE), "old\n", "utf-8");
+    fs.writeFileSync(path.join(dir, "PROJECT.md"), "# 项目扩展\n", "utf-8");
+
+    performAgentSkillAssembly({ directory: target, source: src, force: true });
+    expect(fs.existsSync(path.join(dir, "PROJECT.md"))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, SKILL_FILE), "utf-8")).toBe(src.content);
+  });
+
+  it("dry-run → 不写入，但仍标记 localModified", () => {
+    const { base } = fakePackage();
+    const src = readSkillSource({ base });
+    const target = tmpDir();
+    const local = "---\nname: v-cli\n---\n# 本地旧版\n";
+    const file = seedLocal(target, ".claude/skills", local);
 
     const result = performAgentSkillAssembly({ directory: target, source: src, dryRun: true });
-    expect(result.assembled[0].action).toBe("kept");
+    expect(result.assembled[0].action).toBe("assemble");
+    expect(result.assembled[0].localModified).toBe(true);
     expect(fs.readFileSync(file, "utf-8")).toBe(local);
   });
 });

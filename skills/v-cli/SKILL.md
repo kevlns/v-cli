@@ -41,7 +41,7 @@ description: >
 - 产物与归属：
   - 根 `AGENTS.md` 为**工具生成物**（建议纳入 `.gitignore`），禁止手改；需要更新内容时升级 v-cli 后重跑 init。
   - 分支不变式（实测）：① `AGENTS.md` 不存在 → 写入它**并**装配 skill；② `AGENTS.md` 已存在且未加 `--force` → **整体拒绝**（`action=refused`、`skill.status=skipped-init-failed`），不做任何改动；`--force` 会同时覆盖两者。
-  - **skill 保护**：命中目录下已有 `v-cli/SKILL.md` 且内容与随包版本**不同**（项目侧已按实时命令面回补）时，默认**保留本地版本**（`action=kept`）而不覆盖；内容一致时正常覆盖；只有 `--force` 才会用随包版本替换本地版本。因此项目侧正本不会因日常 init 而降级。
+  - **skill 同步**：**随包版本是规范的唯一权威**——命中目录下已有 `v-cli/SKILL.md` 时一律按随包版本刷新（本地修改会被覆盖，工具在 `localModified=true` 时给出提示）；目标目录中随包**没有**的文件默认保留，供项目放扩展说明（如 `PROJECT.md`）；`--force` 时做完全同步（连扩展文件一起清掉，目录与随包逐文件一致）。因此项目**不要**直接改 `SKILL.md`，项目专属内容写进扩展文件或项目规则文档。
 - 先 `--dry-run --json` 预览目标与动作（含 `skill.assembled[].action` 与 `overwrite`），再实际写入。
 
 ## 官方插件一：xlmerge（跨平台）

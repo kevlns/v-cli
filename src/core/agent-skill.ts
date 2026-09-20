@@ -7,8 +7,9 @@
  *     目录存在才纳入）；
  *   - 命中目录后把整个 skill 目录复制为 <命中目录>/v-cli（整目录覆盖：先删后复制，保证
  *     目标与源一致；rm 不跟随符号链接，删的是链接本身而非链接目标）；
- *   - 目标已有同内容 SKILL.md → 正常覆盖保持一致；已有但内容不同（项目侧按实时命令面回补过）
- *     且未传 force → 保留本地版本（action=kept），避免随包版本降级项目正本；
+ *   - **随包版本是规范唯一权威**：同名文件（SKILL.md）一律按随包版本覆盖，本地修改会被刷新（
+ *     localModified=true 时提示）；目标目录中随包没有的文件默认**保留**，供项目放扩展说明
+ *     （如 PROJECT.md / SKILL.local.md）；clean=true 时做完全同步（清掉扩展文件）；
  *   - 无命中目录 → 正常跳过（不视为错误）。
  */
 import fs from "node:fs";
@@ -39,10 +40,12 @@ export interface SkillAssemblyTarget {
   /** 将写入的 skill 目录绝对路径（<dir>/v-cli） */
   target: string;
   /** assembled=已写入；assemble=dry-run 将写入 */
-  /** assembled=已写入；assemble=dry-run 将写入；kept=本地已修改，保留未覆盖 */
-  action: "assembled" | "assemble" | "kept";
+  /** assembled=已写入；assemble=dry-run 将写入 */
+  action: "assembled" | "assemble";
   /** 是否覆盖了已存在的 skill 目录 */
   overwrite: boolean;
+  /** 目标原本存在且内容与随包不同（本次已按随包版本刷新） */
+  localModified: boolean;
 }
 
 export interface SkillAssemblyResult {
@@ -116,10 +119,26 @@ export function collectAgentSkillDirs(directory: string): string[] {
   return hits;
 }
 
-/** 整目录覆盖复制：先删后复制，保证目标与源逐文件一致（rm 不跟随符号链接） */
+/**
+ * 把随包 skill 同步到目标目录：同名文件按随包覆盖；目标中随包没有的文件默认保留
+ * （项目扩展层，如 PROJECT.md / SKILL.local.md）；purgeExtras 时先清空目录做完全同步。
+ */
+export function syncSkillDir(
+  srcRoot: string,
+  destDir: string,
+  opts: { purgeExtras?: boolean } = {},
+): void {
+  if (opts.purgeExtras) {
+    fs.rmSync(destDir, { recursive: true, force: true });
+  } else {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+  fs.cpSync(srcRoot, destDir, { recursive: true, force: true });
+}
+
+/** 整目录完全同步（先删后复制，保证目标与源逐文件一致；rm 不跟随符号链接） */
 export function copySkillDir(srcRoot: string, destDir: string): void {
-  fs.rmSync(destDir, { recursive: true, force: true });
-  fs.cpSync(srcRoot, destDir, { recursive: true });
+  syncSkillDir(srcRoot, destDir, { purgeExtras: true });
 }
 
 /** 读取目标 skill 的入口文件内容；不存在或不可读返回 undefined */
@@ -139,7 +158,7 @@ export interface AgentSkillAssemblyOptions {
   /** skill 源（readSkillSource 的结果） */
   source: SkillSource;
   dryRun?: boolean;
-  /** true 时无条件覆盖已存在的本地 skill（与 AGENTS.md 的 --force 同源） */
+  /** true 时做完全同步：连目标目录中随包没有的扩展文件一起清掉 */
   force?: boolean;
 }
 
@@ -169,18 +188,14 @@ export function performAgentSkillAssembly(opts: AgentSkillAssemblyOptions): Skil
     const target = path.join(dir, SKILL_NAME);
     const existing = readSkillFileAt(target);
     const exists = existing !== undefined;
-
-    // 本地已修改（项目侧按实时命令面回补过）：默认保留，避免随包版本降级项目正本
-    if (exists && existing !== source.content && !force) {
-      base.assembled.push({ dir, target, action: "kept", overwrite: false });
-      continue;
-    }
+    const localModified = exists && existing !== source.content;
 
     const action: SkillAssemblyTarget["action"] = dryRun ? "assemble" : "assembled";
     if (!dryRun) {
-      copySkillDir(source.root, target);
+      // 工具侧版本是权威：同名文件按随包覆盖；项目扩展文件默认保留（--force 时完全同步）
+      syncSkillDir(source.root, target, { purgeExtras: force });
     }
-    base.assembled.push({ dir, target, action, overwrite: exists });
+    base.assembled.push({ dir, target, action, overwrite: exists, localModified });
   }
   return base;
 }
