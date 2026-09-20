@@ -5,9 +5,9 @@ import path from "node:path";
 import { resolve } from "node:path";
 import {
   collectAgentSkillDirs,
-  copySkillDir,
   performAgentSkillAssembly,
   readSkillSource,
+  syncSkillDir,
   resolveSkillSourceRoot,
   SKILL_NAME,
   SKILL_FILE,
@@ -200,7 +200,7 @@ describe("performAgentSkillAssembly（真实 IO，临时目录）", () => {
     expect(notDir.reason).toContain("不是目录");
   });
 
-  it("copySkillDir：整目录覆盖（先删后复制）", () => {
+  it("syncSkillDir：purgeExtras 时整目录完全同步（先删后复制）", () => {
     const srcRoot = tmpDir();
     fs.mkdirSync(path.join(srcRoot, "sub"), { recursive: true });
     fs.writeFileSync(path.join(srcRoot, "SKILL.md"), "new\n", "utf-8");
@@ -210,7 +210,7 @@ describe("performAgentSkillAssembly（真实 IO，临时目录）", () => {
     fs.mkdirSync(dest, { recursive: true });
     fs.writeFileSync(path.join(dest, "old.txt"), "old\n", "utf-8");
 
-    copySkillDir(srcRoot, dest);
+    syncSkillDir(srcRoot, dest, { purgeExtras: true });
     expect(fs.readFileSync(path.join(dest, "SKILL.md"), "utf-8")).toBe("new\n");
     expect(fs.readFileSync(path.join(dest, "sub", "a.md"), "utf-8")).toBe("a\n");
     expect(fs.existsSync(path.join(dest, "old.txt"))).toBe(false);

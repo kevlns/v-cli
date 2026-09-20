@@ -136,10 +136,6 @@ export function syncSkillDir(
   fs.cpSync(srcRoot, destDir, { recursive: true, force: true });
 }
 
-/** 整目录完全同步（先删后复制，保证目标与源逐文件一致；rm 不跟随符号链接） */
-export function copySkillDir(srcRoot: string, destDir: string): void {
-  syncSkillDir(srcRoot, destDir, { purgeExtras: true });
-}
 
 /** 读取目标 skill 的入口文件内容；不存在或不可读返回 undefined */
 export function readSkillFileAt(targetDir: string): string | undefined {

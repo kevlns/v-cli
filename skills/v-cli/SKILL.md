@@ -107,12 +107,11 @@ receipt 属工程本地生成物：新克隆 / 清理 Library 后即使 `Package
 
 ### 长任务命令：启动即让出，用状态命令轮询
 
-- u-cli-mod **0.2.0 起接管等待预算**：`run_tests` 这类同步长任务默认只等 **5 秒**，到点后任务仍在 Editor 内继续执行，工具打印输出日志路径（`<工程>/Library/editor-pipeline-cli/exec-logs/*.log`）并立即返回（退出码 0），不再有 30s 白等。
+- `run_tests` 这类同步长任务默认只等 **5 秒**：到点后任务仍在 Editor 内继续执行，工具打印输出日志路径（`<工程>/Library/editor-pipeline-cli/exec-logs/*.log`）并立即返回（退出码 0）。
 - 让出后**不要重复发起同一命令**，改用状态命令轮询：测试 `-- command test_status`（直到读到 `summary`），烘焙 `-- command <xxx>_bake_status`。
 - 需要同步拿到完整 `Summary` 时用 `--wait <秒>` 扩大等待（写在 `--` 之前，u-cli-mod 自行剥离，不会透传给 Unity CLI）；`--wait 0` = 立即返回。
 - **优先缩小范围**（最省事）：`run_tests --mode EditMode --filter <命名空间或测试类>` 通常数秒内就同步返回完整 `Summary`，无需轮询。
 - 让出后任务仍在跑，不要重复发起；如需取消用 `-- command cancel_tests`（运行中可能被拒，稍后重试）。
-- 若仍见到 `Pipeline command 'run_tests' timed out after 30000ms`，说明本机 v-cli/u-cli-mod 尚未升级到 0.2.0；升级后该提示消失。
 
 ## 典型流程
 
