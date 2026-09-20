@@ -49,8 +49,8 @@ afterEach(() => {
 });
 
 describe("CLI 集成", () => {
-  it("--version 为 0.2.10", () => {
-    expect(run(["--version"], newHome()).trim()).toBe("0.2.10");
+  it("--version 为 0.2.11", () => {
+    expect(run(["--version"], newHome()).trim()).toBe("0.2.11");
   });
 
   it("--help 列出内置命令与官方插件命令", () => {
@@ -90,7 +90,7 @@ describe("CLI 集成", () => {
     const unity = data.officialPlugins.find((o: { name: string }) => o.name === "unity");
     expect(unity).toBeTruthy();
     expect(unity.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
-    if (process.platform === "win32") expect(unity.version).toBe("0.2.0");
+    if (process.platform === "win32") expect(unity.version).toBe("0.2.1");
   });
 
   it("plugin list 包含内置命令与官方插件行（官方依赖已安装）", () => {
@@ -104,7 +104,7 @@ describe("CLI 集成", () => {
     expect(xl.version).toBe("2.0.0");
     const unity = official.find((r: { name: string }) => r.name === "unity");
     expect(unity.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
-    if (process.platform === "win32") expect(unity.version).toBe("0.2.0");
+    if (process.platform === "win32") expect(unity.version).toBe("0.2.1");
   });
 
   it("plugin list --json 在 fixture 下官方插件可用（win32 主机含 unity）", () => {
@@ -147,7 +147,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const out = run(["xlmerge", "detect"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.env).toEqual({
-      V_CLI_HOST_VERSION: "0.2.10",
+      V_CLI_HOST_VERSION: "0.2.11",
       V_CLI_PLUGIN_API: "1",
       V_CLI_INVOKED_BY: "v-cli",
     });

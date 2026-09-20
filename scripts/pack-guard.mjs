@@ -3,7 +3,7 @@
  * pack:guard — 发布内容护栏。
  *
  * 步骤：npm pack --dry-run --json（身份/文件清单）→ 真实 npm pack → tar 解列复核，
- * 断言：包身份 @kevlns/v-cli@0.2.10、必需文件齐全、禁止内容（src/tests/scripts/
+ * 断言：包身份 @kevlns/v-cli@0.2.11、必需文件齐全、禁止内容（src/tests/scripts/
  * 配置/源码/压缩包/node_modules）不出现、两个官方依赖精确固定、engines.node >= 20。
  * 任何断言失败 → 非零退出。
  */
@@ -15,7 +15,7 @@ import { pathToFileURL } from "node:url";
 const ROOT = process.cwd();
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
 const EXPECTED_NAME = "@kevlns/v-cli";
-const EXPECTED_VERSION = "0.2.10";
+const EXPECTED_VERSION = "0.2.11";
 const REQUIRED_FILES = [
   "dist/cli.mjs",
   "AGENTS.md",
@@ -94,7 +94,7 @@ export function runPackGuard({ cwd = ROOT, keepTarball = false } = {}) {
     const packOut = npmExecFile(["pack", "--json", "--ignore-scripts"], { cwd, encoding: "utf-8" });
     const packed = JSON.parse(packOut)[0];
     const filename = packed.filename;
-    const expectedTarball = "kevlns-v-cli-0.2.10.tgz";
+    const expectedTarball = "kevlns-v-cli-0.2.11.tgz";
     if (filename !== expectedTarball) {
       errors.push(`tar 包名错误: ${filename}（期望 ${expectedTarball}）`);
     }
@@ -128,7 +128,7 @@ export function runPackGuard({ cwd = ROOT, keepTarball = false } = {}) {
       const inner = JSON.parse(pkgOut.stdout);
       const pinned = {
         "@kevlns/xlmerge": "2.0.0",
-        "@kevlns/u-cli-mod": "0.2.0",
+        "@kevlns/u-cli-mod": "0.2.1",
       };
       for (const [dep, expect] of Object.entries(pinned)) {
         if (inner.dependencies?.[dep] !== expect) {
