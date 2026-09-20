@@ -3,9 +3,9 @@
  * test:package — 发布后安装冒烟测试（真实 npm 全局安装）。
  *
  * 流程：npm pack 生成 tgz → 在隔离临时 prefix 中做一次真实 `npm install --global`，
- * 官方依赖 @kevlns/xlmerge@2.0.0 / @kevlns/u-cli-mod@0.1.4 由 registry
+ * 官方依赖 @kevlns/xlmerge@2.0.0 / @kevlns/u-cli-mod@0.2.0 由 registry
  * 正常解析安装 → 通过 npm 生成的 bin wrapper（非直接运行 dist/cli.mjs）执行 CLI，断言：
- *   - `--version` 为 0.2.6；
+ *   - `--version` 为 0.2.7；
  *   - `plugin list --json` 报告 xlmerge available；unity 在 win32 为 available、
  *     非 win32 为 platform-mismatch；
  *   - `agent index --json` / `agent describe --json` 暴露官方清单全量元数据
@@ -30,9 +30,9 @@ import { createHash } from "node:crypto";
 
 const ROOT = process.cwd();
 const IS_WIN = process.platform === "win32";
-const VERSION = "0.2.6";
+const VERSION = "0.2.7";
 const XL_VERSION = "2.0.0";
-const UNITY_VERSION = "0.1.4";
+const UNITY_VERSION = "0.2.0";
 const STREAM_CAP = 4000;
 
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";

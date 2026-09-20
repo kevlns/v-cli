@@ -7,7 +7,7 @@
 
 ## 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.2.6
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.2.7
 - 命令分三类：builtin（内置）、local（~/.v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
   **最新、live 的命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
@@ -23,7 +23,7 @@
 
 ## @kevlns/u-cli-mod — 命令 `v-cli unity …`
 
-**版本**：0.1.4
+**版本**：0.2.0
 **描述**：Pin a Unity project to its exact editor version route, download the verified Unity CLI and install the adapted com.unity.pipeline package for Unity 2022 (Windows-first, non-official Unity tooling).
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
