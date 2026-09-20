@@ -167,7 +167,8 @@ function renderCore(plugins, version) {
   lines.push("- 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看");
   lines.push("- AI Agent 引导文档：`v-cli agent docs` 输出本文件原文（`--json` 含 sha256/content）；");
   lines.push("  `v-cli agent init .` 把它写入工作区（已存在默认拒绝，`--force` 覆盖，`--dry-run` 预览；符号链接目标 fail-closed）；");
-  lines.push("  同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等，清单见 src/core/agent-dirs.ts），无匹配则跳过");
+  lines.push("  同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等，清单见 src/core/agent-dirs.ts），无匹配则跳过；");
+  lines.push("  已有 skill 且其 SKILL.md 与随包版本不同（项目侧已按实时命令面回补）时默认保留本地版本，只有 `--force` 才会用随包版本替换");
   lines.push("- **首次调用规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，");
   lines.push("  掌握该插件包内 `AGENTS.md`；使用规范、快速流程与禁止事项以插件 AGENTS.md 为准。");
   lines.push("- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`）在子进程中运行（stdio 继承）：v-cli 只做路由，");

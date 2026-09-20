@@ -23,7 +23,7 @@ import { VERSION } from "../version";
 /** agent init 的 skill 装配结果（并入 init 的 --json 输出） */
 type InitSkillOutcome =
   | {
-      status: "assembled" | "skipped-none";
+      status: "assembled" | "kept" | "skipped-none";
       assembled: SkillAssemblyTarget[];
       name: string;
       sha256: string;
@@ -39,6 +39,10 @@ function skillOutcomeText(outcome: InitSkillOutcome, dryRun: boolean): string {
     case "assembled": {
       const dirs = outcome.assembled.map((t) => t.dir).join(", ");
       return `[skill v-cli] ${verb} ${outcome.assembled.length} 个 agent 目录：${dirs}`;
+    }
+    case "kept": {
+      const dirs = outcome.assembled.map((t) => t.dir).join(", ");
+      return `[skill v-cli] 保留本地已修改版本（未覆盖）：${dirs}；如需用随包版本覆盖请加 --force`;
     }
     case "skipped-none":
       return "[skill v-cli] 未检测到匹配的 agent 技能目录，跳过装配";
@@ -228,7 +232,9 @@ const INIT_HELP_TEXT = [
   "  [directory]  目标目录，默认当前工作目录；必须已存在且为目录",
   "",
   "默认行为（无 --force）：目标已存在 AGENTS.md 时拒绝并退出 1，绝不改动现有文件。",
-  "  --force    覆盖已存在的 AGENTS.md（原子写入：同目录临时文件 + rename）",
+  "  --force    覆盖已存在的 AGENTS.md 与本地已修改的 skill（原子写入：同目录临时文件 + rename）",
+  "  skill 保护  已有 skill 且内容与随包版本不同（项目侧已回补）时默认保留不覆盖，只有 --force 才会替换；",
+  "             内容一致时正常覆盖保持一致。",
   "  --dry-run  只报告目标与将执行的动作，不写入任何文件",
   "  --json     成功/干跑输出稳定 JSON { ok, dryRun, action, directory, target, package, version, sha256, bytes }；",
   "             拒绝（如已存在未加 --force）输出 { ok: false, action: \"refused\", reason, … } 且退出 1；",
@@ -304,7 +310,7 @@ export const agent: CliCommand = {
           { name: "directory", required: false, description: "目标目录（默认当前工作目录；须已存在且为目录）" },
         ],
         options: [
-          { flags: "--force", description: "覆盖已存在 AGENTS.md（原子写入）" },
+          { flags: "--force", description: "覆盖已存在的 AGENTS.md 与本地已修改的 skill（原子写入）" },
           { flags: "--dry-run", description: "只报告目标与动作，不写入" },
           { flags: "--json", description: "输出机器可读结果" },
         ],
@@ -428,7 +434,7 @@ export const agent: CliCommand = {
       .command("init")
       .description("初始化 <目录>/AGENTS.md（默认当前目录）；已存在默认拒绝，--force 覆盖，--dry-run 预览")
       .argument("[directory]", "目标目录（默认当前工作目录；必须已存在且为目录）")
-      .option("--force", "覆盖已存在的 AGENTS.md（原子写入）")
+      .option("--force", "覆盖已存在的 AGENTS.md 与本地已修改的 skill（原子写入）")
       .option("--dry-run", "只报告目标与动作，不写入任何文件")
       .option("--json", "输出机器可读结果")
       .addHelpText("after", INIT_HELP_TEXT)
@@ -464,11 +470,14 @@ export const agent: CliCommand = {
                 directory: resolvedDir,
                 source,
                 dryRun: opts.dryRun,
+                force: opts.force,
               });
+              const keptOnly =
+                skill.assembled.length > 0 && skill.assembled.every((t) => t.action === "kept");
               skillOutcome =
                 skill.assembled.length > 0
                   ? {
-                      status: "assembled",
+                      status: keptOnly ? "kept" : "assembled",
                       assembled: skill.assembled,
                       name: skill.skill.name,
                       sha256: skill.skill.sha256,

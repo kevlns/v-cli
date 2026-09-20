@@ -7,6 +7,8 @@
  *     目录存在才纳入）；
  *   - 命中目录后把整个 skill 目录复制为 <命中目录>/v-cli（整目录覆盖：先删后复制，保证
  *     目标与源一致；rm 不跟随符号链接，删的是链接本身而非链接目标）；
+ *   - 目标已有同内容 SKILL.md → 正常覆盖保持一致；已有但内容不同（项目侧按实时命令面回补过）
+ *     且未传 force → 保留本地版本（action=kept），避免随包版本降级项目正本；
  *   - 无命中目录 → 正常跳过（不视为错误）。
  */
 import fs from "node:fs";
@@ -37,7 +39,8 @@ export interface SkillAssemblyTarget {
   /** 将写入的 skill 目录绝对路径（<dir>/v-cli） */
   target: string;
   /** assembled=已写入；assemble=dry-run 将写入 */
-  action: "assembled" | "assemble";
+  /** assembled=已写入；assemble=dry-run 将写入；kept=本地已修改，保留未覆盖 */
+  action: "assembled" | "assemble" | "kept";
   /** 是否覆盖了已存在的 skill 目录 */
   overwrite: boolean;
 }
@@ -119,17 +122,30 @@ export function copySkillDir(srcRoot: string, destDir: string): void {
   fs.cpSync(srcRoot, destDir, { recursive: true });
 }
 
+/** 读取目标 skill 的入口文件内容；不存在或不可读返回 undefined */
+export function readSkillFileAt(targetDir: string): string | undefined {
+  try {
+    const file = path.join(targetDir, SKILL_FILE);
+    if (!fs.lstatSync(file).isFile()) return undefined;
+    return fs.readFileSync(file, "utf-8");
+  } catch {
+    return undefined;
+  }
+}
+
 export interface AgentSkillAssemblyOptions {
   /** init 目标目录（绝对路径） */
   directory: string;
   /** skill 源（readSkillSource 的结果） */
   source: SkillSource;
   dryRun?: boolean;
+  /** true 时无条件覆盖已存在的本地 skill（与 AGENTS.md 的 --force 同源） */
+  force?: boolean;
 }
 
 /** 执行 skill 装配规划与写入（真实 IO）；无命中目录 → 正常返回空 assembled */
 export function performAgentSkillAssembly(opts: AgentSkillAssemblyOptions): SkillAssemblyResult {
-  const { directory, source, dryRun = false } = opts;
+  const { directory, source, dryRun = false, force = false } = opts;
   const base: SkillAssemblyResult = {
     ok: true,
     dryRun,
@@ -151,18 +167,20 @@ export function performAgentSkillAssembly(opts: AgentSkillAssemblyOptions): Skil
   const hits = collectAgentSkillDirs(directory);
   for (const dir of hits) {
     const target = path.join(dir, SKILL_NAME);
-    let overwrite = false;
-    try {
-      fs.lstatSync(target);
-      overwrite = true;
-    } catch {
-      overwrite = false;
+    const existing = readSkillFileAt(target);
+    const exists = existing !== undefined;
+
+    // 本地已修改（项目侧按实时命令面回补过）：默认保留，避免随包版本降级项目正本
+    if (exists && existing !== source.content && !force) {
+      base.assembled.push({ dir, target, action: "kept", overwrite: false });
+      continue;
     }
+
     const action: SkillAssemblyTarget["action"] = dryRun ? "assemble" : "assembled";
     if (!dryRun) {
       copySkillDir(source.root, target);
     }
-    base.assembled.push({ dir, target, action, overwrite });
+    base.assembled.push({ dir, target, action, overwrite: exists });
   }
   return base;
 }

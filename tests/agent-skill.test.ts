@@ -148,20 +148,20 @@ describe("performAgentSkillAssembly（真实 IO，临时目录）", () => {
     expect(skillRoot).toBeTruthy();
   });
 
-  it("覆盖：已存在 skill 目录 → overwrite=true 且内容被替换为源", () => {
+  it("覆盖：已存在同内容 skill 目录 → overwrite=true 且整目录替换（清理多余文件）", () => {
     const { base, content } = sourceFixture();
     const target = tmpDir();
     const skillDir = path.join(target, ".agent", "skill");
     fs.mkdirSync(path.join(skillDir, SKILL_NAME), { recursive: true });
-    fs.writeFileSync(path.join(skillDir, SKILL_NAME, SKILL_FILE), "stale\n", "utf-8");
+    // 内容与随包一致 → 正常覆盖；内容不同时的保留语义见「本地 skill 保护」用例
+    fs.writeFileSync(path.join(skillDir, SKILL_NAME, SKILL_FILE), content, "utf-8");
+    fs.writeFileSync(path.join(skillDir, SKILL_NAME, "extra.txt"), "x", "utf-8");
     const src = readSkillSource({ base });
     const result = performAgentSkillAssembly({ directory: target, source: src });
     expect(result.assembled).toHaveLength(1);
     expect(result.assembled[0].overwrite).toBe(true);
     expect(fs.readFileSync(path.join(skillDir, SKILL_NAME, SKILL_FILE), "utf-8")).toBe(content);
     // 覆盖是整目录替换：旧的多余文件被清掉
-    fs.writeFileSync(path.join(skillDir, SKILL_NAME, "extra.txt"), "x", "utf-8");
-    performAgentSkillAssembly({ directory: target, source: src });
     expect(fs.existsSync(path.join(skillDir, SKILL_NAME, "extra.txt"))).toBe(false);
   });
 
@@ -214,5 +214,66 @@ describe("performAgentSkillAssembly（真实 IO，临时目录）", () => {
     expect(fs.readFileSync(path.join(dest, "SKILL.md"), "utf-8")).toBe("new\n");
     expect(fs.readFileSync(path.join(dest, "sub", "a.md"), "utf-8")).toBe("a\n");
     expect(fs.existsSync(path.join(dest, "old.txt"))).toBe(false);
+  });
+});
+
+describe("本地 skill 保护（避免随包版本降级项目正本）", () => {
+  function seedLocalSkill(target: string, content: string): string {
+    const dir = path.join(target, ".claude", "skills", SKILL_NAME);
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, SKILL_FILE);
+    fs.writeFileSync(file, content, "utf-8");
+    return file;
+  }
+
+  it("目标内容与随包不同且未传 force → 保留本地版本，不写入", () => {
+    const { base } = fakePackage();
+    const src = readSkillSource({ base });
+    const target = tmpDir();
+    const local = "---\nname: v-cli\n---\n# 项目侧正本\n";
+    const file = seedLocalSkill(target, local);
+
+    const result = performAgentSkillAssembly({ directory: target, source: src });
+    expect(result.ok).toBe(true);
+    expect(result.assembled).toHaveLength(1);
+    expect(result.assembled[0].action).toBe("kept");
+    expect(result.assembled[0].overwrite).toBe(false);
+    expect(fs.readFileSync(file, "utf-8")).toBe(local);
+  });
+
+  it("--force 时用随包版本覆盖本地版本", () => {
+    const { base } = fakePackage();
+    const src = readSkillSource({ base });
+    const target = tmpDir();
+    const file = seedLocalSkill(target, "---\nname: v-cli\n---\n# 项目侧正本\n");
+
+    const result = performAgentSkillAssembly({ directory: target, source: src, force: true });
+    expect(result.assembled[0].action).toBe("assembled");
+    expect(result.assembled[0].overwrite).toBe(true);
+    expect(fs.readFileSync(file, "utf-8")).toBe(src.content);
+  });
+
+  it("内容一致 → 正常覆盖（保持一致）", () => {
+    const { base } = fakePackage();
+    const src = readSkillSource({ base });
+    const target = tmpDir();
+    const file = seedLocalSkill(target, src.content);
+
+    const result = performAgentSkillAssembly({ directory: target, source: src });
+    expect(result.assembled[0].action).toBe("assembled");
+    expect(result.assembled[0].overwrite).toBe(true);
+    expect(fs.readFileSync(file, "utf-8")).toBe(src.content);
+  });
+
+  it("dry-run 下本地已修改 → action=kept 且不写入", () => {
+    const { base } = fakePackage();
+    const src = readSkillSource({ base });
+    const target = tmpDir();
+    const local = "---\nname: v-cli\n---\n# 项目侧正本\n";
+    const file = seedLocalSkill(target, local);
+
+    const result = performAgentSkillAssembly({ directory: target, source: src, dryRun: true });
+    expect(result.assembled[0].action).toBe("kept");
+    expect(fs.readFileSync(file, "utf-8")).toBe(local);
   });
 });
