@@ -40,8 +40,8 @@ description: >
 - 命中以下任一场景必须执行一次：① `v-cli` 未安装（先确认 Node.js >= 20 与 npm 可用，`npm install -g @kevlns/v-cli`，用 `v-cli --version` 与 `v-cli agent index --json` 验证）；② 项目内 skill（`<技能目录>/v-cli/SKILL.md`）缺失。两个场景同时命中只执行一次；命令用单数 `agent`，不得写成 `v-cli agents …`。
 - 产物与归属：
   - 根 `AGENTS.md` 为**工具生成物**（建议纳入 `.gitignore`），禁止手改；需要更新内容时升级 v-cli 后重跑 init。
-  - 分支不变式（实测）：① `AGENTS.md` 不存在 → 写入它**并**装配 skill；② `AGENTS.md` 已存在且未加 `--force` → **整体拒绝**（`action=refused`、`skill.status=skipped-init-failed`），不做任何改动；`--force` 会同时覆盖两者。
-  - **skill 同步**：**随包版本是规范的唯一权威**——命中目录下已有 `v-cli/SKILL.md` 时一律按随包版本刷新（本地修改会被覆盖，工具在 `localModified=true` 时给出提示）；目标目录中随包**没有**的文件默认保留，供项目放扩展说明（如 `PROJECT.md`）；`--force` 时做完全同步（连扩展文件一起清掉，目录与随包逐文件一致）。因此项目**不要**直接改 `SKILL.md`，项目专属内容写进扩展文件或项目规则文档。
+  - `AGENTS.md` 已存在且未加 `--force` 时**整体拒绝**，不做任何改动；`--force` 同时覆盖 AGENTS.md 与 skill。
+  - **skill 同步**：随包版本是唯一权威——已有 `v-cli/SKILL.md` 一律按随包刷新（本地修改被覆盖并提示）；随包没有的文件（项目扩展，如 `PROJECT.md`）默认保留，`--force` 时完全同步。项目不要直接改 `SKILL.md`，专属内容写扩展文件。
 - 先 `--dry-run --json` 预览目标与动作（含 `skill.assembled[].action` 与 `overwrite`），再实际写入。
 
 ## 官方插件一：xlmerge（跨平台）
@@ -105,13 +105,12 @@ receipt 属工程本地生成物：新克隆 / 清理 Library 后即使 `Package
 7. **读取 Editor 当前 Console 首选 `command read_console`**；`get_console_logs` 是兼容别名，`command console` 是回调捕获流，适合 cursor/since 跟随，不能替代原生 Console 快照。若 schema 中缺 `read_console`，先核对 `doctor` 的 `patchVersion`/`installedPatchVersion`/`state`，不要把它当成 `console` 的别名。
 8. 工程内适配包已随仓入库；工具重装写出的文件树与仓库版本一致时（行尾由 `.gitattributes` 归一）**不应产生 git diff**，若出现大面积 diff 应先判定为行尾/编码现象再复核内容，不得据此手工回滚适配包。
 
-### 长任务命令：启动即让出，用状态命令轮询
+### 长任务命令：全量测试走异步，小范围走同步
 
-- `run_tests` 这类同步长任务默认只等 **5 秒**：到点后任务仍在 Editor 内继续执行，工具打印输出日志路径（`<工程>/Library/editor-pipeline-cli/exec-logs/*.log`）并立即返回（退出码 0）。
-- 让出后**不要重复发起同一命令**，改用状态命令轮询：测试 `-- command test_status`（直到读到 `summary`），烘焙 `-- command <xxx>_bake_status`。
-- 需要同步拿到完整 `Summary` 时用 `--wait <秒>` 扩大等待（写在 `--` 之前，u-cli-mod 自行剥离，不会透传给 Unity CLI）；`--wait 0` = 立即返回。
-- **优先缩小范围**（最省事）：`run_tests --mode EditMode --filter <命名空间或测试类>` 通常数秒内就同步返回完整 `Summary`，无需轮询。
-- 让出后任务仍在跑，不要重复发起；如需取消用 `-- command cancel_tests`（运行中可能被拒，稍后重试）。
+- Unity CLI 对同步命令有 30 秒硬性等待上限（`--wait`/`--timeout` 均无法延长），同步 `run_tests` 全量必然超时。
+- 全量：`-- command run_tests --mode EditMode --async_tests`（立即返回）→ 轮询 `-- command test_status` 至 `completed` 拿完整 Summary。
+- 小范围：`--filter <命名空间或类>` 通常数秒内同步返回完整 Summary。
+- 5 秒让位机制只保证 CLI 子进程存活并把输出写入 `Library/editor-pipeline-cli/exec-logs/*.log`，不改变 Editor 侧任务的同步语义；让出后不要重复发起同一命令，取消用 `-- command cancel_tests`。
 
 ## 典型流程
 
@@ -126,6 +125,7 @@ v-cli unity setup <project>                                         # 6. 就绪�
 v-cli unity exec <project> -- command editor_status                 # 7. 执行 Pipeline 命令
 v-cli unity exec <project> -- command read_console --types error,warning --count 100
 v-cli unity exec <project> -- command run_tests --mode EditMode --filter <类名>   # 8. 测试（小范围同步返回）
+v-cli unity exec <project> -- command run_tests --mode EditMode --async_tests     #    全量：立即返回，轮询 test_status
 v-cli xlmerge --repo . detect                                       # 配置表：只读检测
 v-cli xlmerge --repo . launch                                       # 有冲突时启动本地 UI，把 url 交给用户
 ```

@@ -49,32 +49,21 @@ npm install -g git+https://github.com/kevlns/v-cli.git
 v-cli doctor          # 环境体检：node/版本、主目录、配置、官方/本地插件状态
 v-cli plugin list     # 列出内置命令、本地插件与官方插件状态
 v-cli ts 1710000000   # 时间戳互转
-v-cli agent docs      # 输出当前安装包内置 AGENTS.md 原文（AI Agent 引导文档）
-v-cli agent index     # 命令 + agent 元数据索引（--json 输出机器可读）
-v-cli agent describe xlmerge --json
-v-cli agent init .    # （可选）把 AGENTS.md 初始化到当前目录
 ```
 
 ### AI Agent 快速开始
 
-v-cli 内置 AGENTS.md 随包发布，AI Agent 可自行发现并读取引导文档，无需人工粘贴：
+v-cli 内置 AGENTS.md 随包发布，AI Agent 自行发现读取，无需人工粘贴：
 
 ```bash
-v-cli agent docs                    # 读当前包内置 AGENTS.md 原文（--json 拿 package/version/sha256/content）
-v-cli agent index --json            # 枚举全部命令 + 元数据（builtin/local/official，live 发现）
+v-cli agent docs                    # 内置 AGENTS.md 原文（--json 拿 package/version/sha256/content）
+v-cli agent index --json            # 全部命令 + 元数据（builtin/local/official，live 发现）
 v-cli agent describe <name> --json  # 单命令：用法/参数/选项/输出/退出码/安全标签
-v-cli agent init .                  # （可选）把 AGENTS.md 写入工作区，AI Agent 自动读取
+v-cli agent init .                  # （可选）把 AGENTS.md 写入工作区并装配 skill
 ```
 
-`agent docs` 文本模式逐字节输出内置 AGENTS.md，`--json` 输出稳定对象
-`{ package, version, sha256, content }`。
-
-`agent init [directory]`（默认当前目录；目录必须已存在且为目录）：
-
-- 已存在 AGENTS.md 时**默认拒绝并退出 1，绝不改动现有文件**（`--force` 才原子覆盖）；
-- `--dry-run` 只报告目标与将执行的动作，不写入任何文件；
-- 符号链接目标一律 fail-closed 拒绝（不跟随、不覆盖链接目标）；
-- `--json` 输出稳定结果（`ok/dryRun/action/directory/target/sha256/bytes/…`）。
+`agent init [directory]`（默认当前目录）：已存在 AGENTS.md 时默认拒绝退出 1（`--force` 原子覆盖）；
+`--dry-run` 只报告不写入；符号链接目标 fail-closed 拒绝；`--json` 输出稳定结果。
 
 ### 控制器命令（官方插件）
 
@@ -84,7 +73,7 @@ v-cli xlmerge --repo <repo> detect            # 路由到 xlmerge 子进程
 v-cli xlmerge --repo <repo> resolve
 
 # Unity 工具链（仅 Windows 主机可用；其他平台 v-cli 会拒绝路由并说明原因）
-npm install -g @kevlns/u-cli-mod@0.2.1
+npm install -g @kevlns/u-cli-mod@0.2.2
 v-cli unity doctor <project>
 ```
 
@@ -202,11 +191,9 @@ npm run test:package      # 发布后安装冒烟：npm pack → 隔离 prefix �
 npm run check             # build + typecheck + test + check:agents + pack:guard
 ```
 
-> `@kevlns/xlmerge@2.0.0` / `@kevlns/u-cli-mod@0.2.1` 已发布并由 `npm install`
-> 装入仓库 node_modules：`generate:agents`/`check:agents` 的默认（installed-deps）检查即为
-> 最终形态，`npm run check` 因此才能全绿，CI 的 `check:agents` 步骤也随之总是生效
-> （不依赖 sibling 仓库检出；若未来仍需要在预发布阶段以 sibling 清单 bootstrap，
-> 可显式传 `--manifest <path>`）。
+> `@kevlns/xlmerge@2.0.0` / `@kevlns/u-cli-mod@0.2.2` 已发布并随 `npm install` 装入仓库
+> node_modules，`check:agents` 的 installed-deps 检查即为最终形态；预发布阶段需要以本地
+> 清单 bootstrap 时显式传 `--manifest <path>`。
 
 ## Package family
 
@@ -214,9 +201,9 @@ kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）
 
 | Package | Purpose | Status |
 | --- | --- | --- |
-| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.11 |
+| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.12 |
 | [`xlmerge`](https://github.com/kevlns/xlmerge) | Git 中 .xlsx/.xlsm 冲突可视化解决工具 | v2.0.0 |
-| [`u-cli-mod`](https://github.com/kevlns/u-cli-mod) | Unity 精确版本路由 + CLI + pipeline 包（Windows-first） | v0.2.1 |
+| [`u-cli-mod`](https://github.com/kevlns/u-cli-mod) | Unity 精确版本路由 + CLI + pipeline 包（Windows-first） | v0.2.2 |
 
 ## Compatibility
 
