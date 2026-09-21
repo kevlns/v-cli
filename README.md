@@ -189,6 +189,8 @@ npm run check:agents      # AGENTS.md 漂移检查（默认与已安装依赖比
 npm run pack:guard        # 发布内容护栏：身份/必需文件/禁止内容/依赖精确固定/engines
 npm run test:package      # 发布后安装冒烟：npm pack → 隔离 prefix 全局安装 → 运行 bin wrapper 断言
 npm run check             # build + typecheck + test + check:agents + pack:guard
+
+> 发版除 `npm version` 外，还需同步全仓版本断言（`grep -rn 旧版本号 tests/ scripts/ src/` 应为零，含 pack-guard 依赖精确固定与 smoke 的插件版本期望），再打 tag。
 ```
 
 > `@kevlns/xlmerge@2.0.0` / `@kevlns/u-cli-mod@0.2.2` 已发布并随 `npm install` 装入仓库
