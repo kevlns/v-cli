@@ -92,7 +92,7 @@ Unity 2022 工程**精确版本路由**（版本号 + revision 双重匹配）+ 
 | `outdated` / `invalid` | 先关闭目标工程 Editor，再 `v-cli unity pipeline install <project> --force`（自动备份，备份与 receipt 都在 `Library/editor-pipeline-cli/`，已被 gitignore） |
 | `current` | 可直接 `exec` |
 
-receipt 属工程本地生成物：新克隆 / 清理 Library 后即使 `Packages/com.unity.pipeline` 已入库且文件树完好，`state` 仍会是 `invalid`，需按上一行重装一次补齐 receipt。
+receipt 属工程本地生成物；就绪以当前路由的完整文件树校验为准。新克隆 / 清理 Library 后，文件树完好仍为 `current`，不因 receipt 缺失或陈旧要求重装。`pipeline.verification` 列出不匹配文件与仅行尾差异；`sourceReady=false` 只表示生成缓存需重建，不代表已安装包失效。新生成文本统一 LF，已安装文本兼容 LF/CRLF 等价，二进制和实际内容仍严格校验。
 
 ### 关键规则（违反即报错或导致损坏，必须遵守）
 

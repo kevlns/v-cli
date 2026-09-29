@@ -73,7 +73,7 @@ v-cli xlmerge --repo <repo> detect            # 路由到 xlmerge 子进程
 v-cli xlmerge --repo <repo> resolve
 
 # Unity 工具链（仅 Windows 主机可用；其他平台 v-cli 会拒绝路由并说明原因）
-npm install -g @kevlns/u-cli-mod@0.2.2
+npm install -g @kevlns/u-cli-mod@0.2.3
 v-cli unity doctor <project>
 ```
 
@@ -193,7 +193,7 @@ npm run check             # build + typecheck + test + check:agents + pack:guard
 > 发版除 `npm version` 外，还需同步全仓版本断言（`grep -rn 旧版本号 tests/ scripts/ src/` 应为零，含 pack-guard 依赖精确固定与 smoke 的插件版本期望），再打 tag。
 ```
 
-> `@kevlns/xlmerge@2.0.0` / `@kevlns/u-cli-mod@0.2.2` 已发布并随 `npm install` 装入仓库
+> `@kevlns/xlmerge@2.0.0` / `@kevlns/u-cli-mod@0.2.3` 已发布并随 `npm install` 装入仓库
 > node_modules，`check:agents` 的 installed-deps 检查即为最终形态；预发布阶段需要以本地
 > 清单 bootstrap 时显式传 `--manifest <path>`。
 
@@ -203,9 +203,9 @@ kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）
 
 | Package | Purpose | Status |
 | --- | --- | --- |
-| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.12 |
+| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.13 |
 | [`xlmerge`](https://github.com/kevlns/xlmerge) | Git 中 .xlsx/.xlsm 冲突可视化解决工具 | v2.0.0 |
-| [`u-cli-mod`](https://github.com/kevlns/u-cli-mod) | Unity 精确版本路由 + CLI + pipeline 包（Windows-first） | v0.2.2 |
+| [`u-cli-mod`](https://github.com/kevlns/u-cli-mod) | Unity 精确版本路由 + CLI + pipeline 包（Windows-first） | v0.2.3 |
 
 ## Compatibility
 
