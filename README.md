@@ -23,7 +23,7 @@ v-cli 让你**用一个命令沉淀所有个人小工具**，而不用为每个�
 它被设计为**依赖极少、秒级启动、写个文件就能扩展**，与 kevlns 工具家族的其余部分可自由组合。
 
 - **插件化架构** - 内置命令走注册表随版本发布；本地插件放进 `~/.v-cli/commands/` 立即生效，无需发版
-- **官方插件白名单** - `@kevlns/xlmerge`（`xlmerge`）与 `@kevlns/u-cli-mod`（`unity`）是唯一被路由的官方插件，安装后在子进程中运行
+- **官方插件白名单** - `@kevlns/xlmerge`（`xlmerge`）、`@kevlns/u-cli-mod`（`unity`）与 `@kevlns/figma-to-uprefab`（`figma`），安装后在子进程中运行
 - **容错加载** - 单个插件语法错误、契约不符或注册异常只会被跳过并报告，绝不阻断其他命令
 - **双通道输出** - 结果走 stdout（可管道、可脚本化），诊断走 stderr
 - **agent 友好** - `agent docs`/`agent init` 让 AI Agent 自举读取引导文档；`agent index/describe` 输出统一索引与完整元数据；仓库内 AGENTS.md 自动生成并有漂移检查
@@ -75,6 +75,16 @@ v-cli xlmerge --repo <repo> resolve
 # Unity 工具链（仅 Windows 主机可用；其他平台 v-cli 会拒绝路由并说明原因）
 npm install -g @kevlns/u-cli-mod@0.2.3
 v-cli unity doctor <project>
+
+# Figma -> Unity UGUI staging Prefab（仅 Windows，依赖 Vant Framework）
+v-cli agent docs figma
+v-cli figma --help
+v-cli figma config init --project C:/path/to/UnityProject
+v-cli figma export <fileKey> --project C:/path/to/UnityProject
+v-cli figma contract --project C:/path/to/UnityProject --allow-missing-ir
+v-cli figma unity install --project C:/path/to/UnityProject
+v-cli figma build --project C:/path/to/UnityProject
+v-cli figma contract --project C:/path/to/UnityProject
 ```
 
 `v-cli <插件命令> …` 的执行语义：插件在**子进程**中运行（stdio 继承），
@@ -104,7 +114,7 @@ v-cli plugin list     # [local] hello 已出现
 ```
 
 > 旧版插件（无 `apiVersion: 1`）会被拒绝并给出解释性错误，请补上字段后重载。
-> 本地插件不能占用内置命令名（`doctor`/`plugin`/`ts`/`agent`/`help`）或官方命令名（`xlmerge`/`unity`）。
+> 本地插件不能占用内置命令名（`doctor`/`plugin`/`ts`/`agent`/`help`）或官方命令名（`xlmerge`/`unity`/`figma`）。
 
 ### 在脚本中消费输出
 
@@ -193,7 +203,7 @@ npm run check             # build + typecheck + test + check:agents + pack:guard
 > 发版除 `npm version` 外，还需同步全仓版本断言（`grep -rn 旧版本号 tests/ scripts/ src/` 应为零，含 pack-guard 依赖精确固定与 smoke 的插件版本期望），再打 tag。
 ```
 
-> `@kevlns/xlmerge@2.0.0` / `@kevlns/u-cli-mod@0.2.3` 已发布并随 `npm install` 装入仓库
+> `@kevlns/xlmerge@2.0.0` / `@kevlns/u-cli-mod@0.2.3` / `@kevlns/figma-to-uprefab@0.1.1` 随 `npm install` 装入仓库
 > node_modules，`check:agents` 的 installed-deps 检查即为最终形态；预发布阶段需要以本地
 > 清单 bootstrap 时显式传 `--manifest <path>`。
 
@@ -203,9 +213,10 @@ kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）
 
 | Package | Purpose | Status |
 | --- | --- | --- |
-| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.13 |
+| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.14 |
 | [`xlmerge`](https://github.com/kevlns/xlmerge) | Git 中 .xlsx/.xlsm 冲突可视化解决工具 | v2.0.0 |
 | [`u-cli-mod`](https://github.com/kevlns/u-cli-mod) | Unity 精确版本路由 + CLI + pipeline 包（Windows-first） | v0.2.3 |
+| [`figma-to-uprefab`](https://github.com/kevlns/figma-to-uprefab) | Figma 导出、契约校验与 Unity UGUI staging Prefab 构建 | v0.1.1 |
 
 ## Compatibility
 
@@ -214,8 +225,8 @@ kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）
 | Node.js | `20` and later |
 | TypeScript | `5.6` and later（仅开发时） |
 
-CLI 核心逻辑以单文件 ESM（`dist/cli.mjs`）分发，运行时依赖 `commander` 与两个官方插件包
-（`@kevlns/xlmerge`、`@kevlns/u-cli-mod`，均为精确固定版本；安装 v-cli 时一起安装，
+CLI 核心逻辑以单文件 ESM（`dist/cli.mjs`）分发，运行时依赖 `commander` 与三个官方插件包
+（`@kevlns/xlmerge`、`@kevlns/u-cli-mod`、`@kevlns/figma-to-uprefab`，均为精确固定版本；安装 v-cli 时一起安装，
 未装时 `plugin list`/`doctor`/`agent index` 会诚实报告 `missing` 状态）。
 
 ## Contributing

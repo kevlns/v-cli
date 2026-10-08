@@ -8,8 +8,8 @@
  * - 带 --manifest（可重复）：直接从清单文件生成（显式/bootstrap 模式）。
  * - 不带 --manifest（默认/门禁模式）：
  *   1) 先从仓库 node_modules 解析已安装的官方插件依赖；
- *   2) 一个都没装到时，若 sibling 仓库清单 ../xlmerge/v-cli.plugin.json 与
- *      ../u-cli-mod/v-cli.plugin.json 存在，用之作为确定性开发/bootstrap 回退
+ *   2) 一个都没装到时，使用 ../xlmerge、../u-cli-mod、../figma-to-uprefab
+ *      中存在的 sibling 仓库清单，作为确定性开发/bootstrap 回退
  *      （发布前的本地仓库、以及依赖发布后安装的 CI 都能跑 npm run check:agents）；
  *   3) 两路都解析不到时，生成“未安装”提示的核心版（check 模式会因与已提交文件
  *      不一致而失败，显式暴露该要求）。
@@ -26,12 +26,14 @@ const MARKER = "<!-- v-cli-agents:generated -->";
 const OFFICIAL_WHITELIST = [
   { package: "@kevlns/xlmerge", command: "xlmerge" },
   { package: "@kevlns/u-cli-mod", command: "unity" },
+  { package: "@kevlns/figma-to-uprefab", command: "figma" },
 ];
 
 /** 开发/bootstrap 回退：官方依赖未安装时，sibling 仓库清单作为确定性来源 */
 const SIBLING_MANIFESTS = [
   path.join("..", "xlmerge", "v-cli.plugin.json"),
   path.join("..", "u-cli-mod", "v-cli.plugin.json"),
+  path.join("..", "figma-to-uprefab", "v-cli.plugin.json"),
 ];
 
 function parseArgs(argv) {
@@ -171,7 +173,7 @@ function renderCore(plugins, version) {
   lines.push("  随包版本是规范唯一权威：同名 SKILL.md 一律按随包版本刷新（本地修改会被覆盖并提示）；随包没有的文件（项目扩展，如 PROJECT.md）默认保留，`--force` 时完全同步");
   lines.push("- **首次调用规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，");
   lines.push("  掌握该插件包内 `AGENTS.md`；使用规范、快速流程与禁止事项以插件 AGENTS.md 为准。");
-  lines.push("- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`）在子进程中运行（stdio 继承）：v-cli 只做路由，");
+  lines.push("- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`）在子进程中运行（stdio 继承）：v-cli 只做路由，");
   lines.push("  不解析、不改写插件的 stdout/stderr；插件 `--help`/`--json` 等参数由插件自己消费");
   lines.push("- 插件对 worktree 的写入/提交行为以插件清单 v-cli.plugin.json 的 `agent.safety` 为准：");
   lines.push("  v-cli 不替插件做 diff/write-back/commit；**未经显式 flag 不得 push**");
@@ -227,8 +229,8 @@ function render(plugins, version) {
   if (plugins.length === 0) {
     lines.push("## 官方插件");
     lines.push("");
-    lines.push("> 当前解析不到任何已安装的官方插件包（@kevlns/xlmerge / @kevlns/u-cli-mod 尚未安装）。");
-    lines.push("> 请安装后重新生成本文件：`npm install @kevlns/xlmerge@2.0.0 @kevlns/u-cli-mod@0.2.3`");
+    lines.push("> 当前解析不到任何已安装的官方插件包（@kevlns/xlmerge / @kevlns/u-cli-mod / @kevlns/figma-to-uprefab 尚未安装）。");
+    lines.push("> 请安装后重新生成本文件：`npm install @kevlns/xlmerge@2.0.0 @kevlns/u-cli-mod@0.2.3 @kevlns/figma-to-uprefab@0.1.1`");
     lines.push("> 或直接用实时索引：`v-cli agent index --json`（会列出官方插件与安装状态）。");
     lines.push("");
   } else {

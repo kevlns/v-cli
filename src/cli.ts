@@ -24,7 +24,7 @@ function scanLeadingJson(rawArgs: string[]): { json: boolean; args: string[]; co
   return { json: i > 0, args: rawArgs.slice(i), commandIndex: i };
 }
 
-/** 官方插件拦截：`v-cli <xlmerge|unity> …` 时把剩余词元原样转交给插件子进程 */
+/** 官方插件拦截：`v-cli <xlmerge|unity|figma> …` 时把剩余词元原样转交给插件子进程 */
 async function interceptOfficialCommand(
   rawArgs: string[],
   commandIndex: number,

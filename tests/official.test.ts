@@ -61,8 +61,9 @@ function writeTempPlugin(
 }
 
 describe("官方插件白名单", () => {
-  it("白名单恰为两个官方插件（严格，不随扫描变化）", () => {
+  it("白名单恰为三个官方插件（严格，不随扫描变化）", () => {
     expect(OFFICIAL_PLUGINS.map((p) => p.package).sort()).toEqual([
+      "@kevlns/figma-to-uprefab",
       "@kevlns/u-cli-mod",
       "@kevlns/xlmerge",
     ]);
@@ -70,6 +71,8 @@ describe("官方插件白名单", () => {
     expect(OFFICIAL_COMMAND_NAMES.has("unity")).toBe(true);
     expect(isOfficialCommand("xlmerge")).toBe(true);
     expect(isOfficialCommand("unity")).toBe(true);
+    expect(isOfficialCommand("figma")).toBe(true);
+    expect(OFFICIAL_COMMAND_NAMES.has("figma")).toBe(true);
     expect(isOfficialCommand("doctor")).toBe(false);
   });
 
@@ -235,7 +238,7 @@ describe("discoverOfficialPlugin", () => {
       expect(isOfficialCommand(info.name)).toBe(true);
       expect(info.source).toBe("official");
     }
-    expect(all.map((i) => i.name).sort()).toEqual(["unity", "xlmerge"]);
+    expect(all.map((i) => i.name).sort()).toEqual(["figma", "unity", "xlmerge"]);
   });
 
   it("whitelist 解析器绝不被要求解析非白名单包", () => {
@@ -247,7 +250,7 @@ describe("discoverOfficialPlugin", () => {
         return fs.existsSync(p) ? p : undefined;
       }),
     );
-    expect(calls).toEqual(["@kevlns/xlmerge", "@kevlns/u-cli-mod"]);
+    expect(calls).toEqual(["@kevlns/xlmerge", "@kevlns/u-cli-mod", "@kevlns/figma-to-uprefab"]);
   });
 });
 

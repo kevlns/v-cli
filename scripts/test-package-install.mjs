@@ -3,11 +3,11 @@
  * test:package — 发布后安装冒烟测试（真实 npm 全局安装）。
  *
  * 流程：npm pack 生成 tgz → 在隔离临时 prefix 中做一次真实 `npm install --global`，
- * 官方依赖 @kevlns/xlmerge@2.0.0 / @kevlns/u-cli-mod@0.2.3 由 registry
+ * 官方依赖 @kevlns/xlmerge@2.0.0 / @kevlns/u-cli-mod@0.2.3 / @kevlns/figma-to-uprefab@0.1.1 由 registry
  * 正常解析安装 → 通过 npm 生成的 bin wrapper（非直接运行 dist/cli.mjs）执行 CLI，断言：
- *   - `--version` 为 0.2.13；
+ *   - `--version` 为 0.2.14；
  *   - `plugin list --json` 报告 xlmerge available；unity 在 win32 为 available、
- *     非 win32 为 platform-mismatch；
+ *     非 win32 为 platform-mismatch；figma 同样遵循 Windows 平台门禁；
  *   - `agent index --json` / `agent describe --json` 暴露官方清单全量元数据
  *     （arguments/options/output/exitCodes/safety）；
  *   - `agent docs` 逐字节输出安装包内 AGENTS.md，`agent docs --json` 给出
@@ -30,9 +30,10 @@ import { createHash } from "node:crypto";
 
 const ROOT = process.cwd();
 const IS_WIN = process.platform === "win32";
-const VERSION = "0.2.13";
+const VERSION = "0.2.14";
 const XL_VERSION = "2.0.0";
 const UNITY_VERSION = "0.2.3";
+const FIGMA_VERSION = "0.1.1";
 const STREAM_CAP = 4000;
 
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -175,7 +176,7 @@ function smoke(filename) {
       ["install", "--global", "--prefix", prefix, "--no-audit", "--no-fund", path.join(ROOT, filename)],
       { cwd: ROOT, env, timeout: 300_000 },
     );
-    for (const dep of ["@kevlns/xlmerge", "@kevlns/u-cli-mod"]) {
+    for (const dep of ["@kevlns/xlmerge", "@kevlns/u-cli-mod", "@kevlns/figma-to-uprefab"]) {
       assert(
         installedDepPath(prefix, dep),
         `npm 全局安装后未能解析到官方依赖 ${dep}（registry 解析失败？）`,
@@ -211,7 +212,30 @@ function smoke(filename) {
     }
 
     // 4) agent index --json：官方清单全量元数据
+    const figma = list.find((r) => r.source === "official" && r.name === "figma");
+    assert(figma, "plugin list 缺少官方行 figma");
+    assert(figma.version === FIGMA_VERSION, "figma 版本与固定依赖不一致");
+    assert(figma.status === (IS_WIN ? "available" : "platform-mismatch"), "figma 平台门禁不符");
     const rows = JSON.parse(cliExpectOk(prefix, ["agent", "index", "--json"], runOpts));
+    const figmaRow = rows.find((r) => r.type === "official" && r.name === "figma");
+    const figmaDesc = JSON.parse(cliExpectOk(prefix, ["agent", "describe", "figma", "--json"], runOpts));
+    assert(figmaDesc.package === "@kevlns/figma-to-uprefab", "figma 插件身份不符");
+    if (IS_WIN) {
+      assert(figmaRow?.metadataStatus === "full", "agent index figma 元数据不完整");
+      assert(hasFullMeta(figmaDesc.commands?.find((c) => c.path.join(" ") === "build")), "agent describe figma build 元数据不完整");
+    } else {
+      assert(figmaRow?.status === "platform-mismatch", "agent index figma 应报告平台不匹配");
+    }
+    const figmaDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "figma", "--json"], runOpts));
+    assert(figmaDocs.version === FIGMA_VERSION && figmaDocs.content.includes("No Node source->IR converter"), "figma Agent 规范不符");
+    if (IS_WIN) {
+      assert(cliExpectOk(prefix, ["figma", "--version"], runOpts).trim() === FIGMA_VERSION, "figma 路由版本不符");
+      const figmaHelp = cliExpectOk(prefix, ["figma", "--help"], runOpts);
+      assert(figmaHelp.includes("export") && figmaHelp.includes("contract"), "figma --help 未路由到插件");
+    } else {
+      const r = cliRun(prefix, ["figma", "--version"], runOpts);
+      assert(r.status !== 0 && /仅支持平台/.test(r.stderr ?? ""), "figma 应拒绝非 Windows 路由");
+    }
     const xlRow = rows.find((r) => r.type === "official" && r.name === "xlmerge");
     assert(xlRow?.metadataStatus === "full", `agent index xlmerge metadataStatus = ${xlRow?.metadataStatus}（期望 full）`);
     const xlDetect = xlRow?.commands?.find((c) => c.path.join(" ") === "detect");
@@ -312,7 +336,7 @@ function smoke(filename) {
       assert(initHelp.includes(line), `安装版 agent init --help 缺少 ${line}`);
     }
 
-    return `test:package OK — ${filename} 真实全局安装后 wrapper 冒烟全绿：--version=${version}，xlmerge@${XL_VERSION} available，unity@${UNITY_VERSION} ${IS_WIN ? "available" : "platform-mismatch（fail-closed 已断言）"}，agent docs sha256=${sha256(installedDocs).slice(0, 12)}…，help 发现 AI Agent 快速开始`;
+    return `test:package OK — ${filename} 真实全局安装后 wrapper 冒烟全绿：--version=${version}，xlmerge@${XL_VERSION} available，unity@${UNITY_VERSION} / figma@${FIGMA_VERSION} ${IS_WIN ? "available" : "platform-mismatch（fail-closed 已断言）"}，agent docs sha256=${sha256(installedDocs).slice(0, 12)}…，help 发现 AI Agent 快速开始`;
   } finally {
     try {
       fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

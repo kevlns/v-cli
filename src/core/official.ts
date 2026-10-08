@@ -27,6 +27,11 @@ export const OFFICIAL_PLUGINS: OfficialPluginSpec[] = [
     command: "unity",
     description: "Unity 工程精确版本路由 + 官方 CLI 下载 + com.unity.pipeline 适配包（Windows-first）",
   },
+  {
+    package: "@kevlns/figma-to-uprefab",
+    command: "figma",
+    description: "Figma 标记界面导出、契约校验与 Unity UGUI staging Prefab 构建（Windows-first）",
+  },
 ];
 
 /** 官方命令名（本地插件不可占用） */

@@ -49,8 +49,8 @@ afterEach(() => {
 });
 
 describe("CLI 集成", () => {
-  it("--version 为 0.2.13", () => {
-    expect(run(["--version"], newHome()).trim()).toBe("0.2.13");
+  it("--version 为 0.2.14", () => {
+    expect(run(["--version"], newHome()).trim()).toBe("0.2.14");
   });
 
   it("--help 列出内置命令与官方插件命令", () => {
@@ -81,7 +81,7 @@ describe("CLI 集成", () => {
     expect(data).toHaveProperty("node");
     expect(data.configWritable).toBe(true);
     expect(Array.isArray(data.officialPlugins)).toBe(true);
-    expect(data.officialPlugins.length).toBe(2);
+    expect(data.officialPlugins.length).toBe(3);
     // 官方依赖已随 npm install 装入仓库 → 诚实 available（unity 非 win32 为 platform-mismatch）
     const xl = data.officialPlugins.find((o: { name: string }) => o.name === "xlmerge");
     expect(xl).toBeTruthy();
@@ -98,7 +98,7 @@ describe("CLI 集成", () => {
     const names = data.filter((r: { source: string }) => r.source === "builtin").map((r: { name: string }) => r.name);
     for (const name of ["doctor", "plugin", "ts", "agent"]) expect(names).toContain(name);
     const official = data.filter((r: { source: string }) => r.source === "official");
-    expect(official.map((r: { name: string }) => r.name).sort()).toEqual(["unity", "xlmerge"]);
+    expect(official.map((r: { name: string }) => r.name).sort()).toEqual(["figma", "unity", "xlmerge"]);
     const xl = official.find((r: { name: string }) => r.name === "xlmerge");
     expect(xl.status).toBe("available");
     expect(xl.version).toBe("2.0.0");
@@ -147,7 +147,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const out = run(["xlmerge", "detect"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.env).toEqual({
-      V_CLI_HOST_VERSION: "0.2.13",
+      V_CLI_HOST_VERSION: "0.2.14",
       V_CLI_PLUGIN_API: "1",
       V_CLI_INVOKED_BY: "v-cli",
     });
@@ -164,6 +164,33 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const out = run(["unity", "doctor", "proj"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.argv).toEqual(["doctor", "proj"]);
+  });
+
+  it("figma 元数据与规范来自已安装的官方包", () => {
+    const home = newHome();
+    const info = JSON.parse(run(["agent", "describe", "figma", "--json"], home));
+    expect(info.package).toBe("@kevlns/figma-to-uprefab");
+    expect(info.version).toBe("0.1.1");
+    expect(info.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
+    const docs = JSON.parse(run(["agent", "docs", "figma", "--json"], home));
+    expect(docs.package).toBe(info.package);
+    expect(docs.content).toContain("No Node source->IR converter");
+  });
+
+  it.skipIf(process.platform !== "win32")("figma 配置命令原样转发项目与用户配置路径", () => {
+    const home = newHome();
+    const configPath = join(home, "figma-config.json");
+    run(["figma", "config", "init", "--project", home, "--config", configPath], home);
+    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+    const projectKey = home.replace(/\\/g, "/").toLowerCase();
+    expect(config.projects[projectKey].uiSystem).toBe("UGUI");
+    expect(run(["figma", "--version"], home).trim()).toBe("0.1.1");
+  });
+
+  it.skipIf(process.platform === "win32")("figma 命令在非 win32 平台拒绝路由", () => {
+    const r = runWithStatus(["figma", "--help"], newHome());
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("仅支持平台 [win32]");
   });
 
   it.skipIf(process.platform === "win32")("unity 命令在非 win32 平台 fail-closed", () => {
