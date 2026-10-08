@@ -1,8 +1,8 @@
 ---
 name: v-cli
 description: >
-  使用 kevlns 的个人工具箱 CLI（v-cli）处理配置表冲突与 Unity 工程精确版本工具链。当任务提到 v-cli、xlmerge、
-  unity 命令、配置表 .xlsx/.xlsm Git 冲突处理、Unity CLI 安装、Unity 工程诊断/体检（doctor）、
+  使用 kevlns 的个人工具箱 CLI（v-cli）处理配置表冲突、Unity 工程精确版本工具链与 Figma 转 Unity UGUI Prefab。当任务提到 v-cli、xlmerge、
+  unity / figma 命令、figma-to-uprefab、配置表 .xlsx/.xlsm Git 冲突处理、Unity CLI 安装、Unity 工程诊断/体检（doctor）、
   com.unity.pipeline 适配包安装、v-cli agent init 工作区初始化时使用本 skill。
 ---
 
@@ -10,11 +10,11 @@ description: >
 
 ## 工具概述
 
-- `@kevlns/v-cli` 是 npm 全局安装的个人工具箱 CLI，插件化架构；环境要求 Node.js >= 20（`unity` 插件仅 win32，其他平台 v-cli 拒绝路由）。
+- `@kevlns/v-cli` 是 npm 全局安装的个人工具箱 CLI，插件化架构；环境要求 Node.js >= 20（`unity` 与 `figma` 插件仅 win32，其他平台 v-cli 拒绝路由）。
 - 命令分三类：
   - **builtin**（内置）：`doctor`（环境体检）、`plugin list/path`（插件管理）、`ts`（时间戳互转）、`agent index/describe/docs/init`（agent 引导）。
   - **local**：`~/.v-cli/commands/` 下的本地插件。
-  - **official**（官方插件，经 v-cli 路由）：`xlmerge`、`unity`。
+  - **official**（官方插件，经 v-cli 路由）：`xlmerge`、`unity`、`figma`。
 - **本文件不写死任何版本号**：v-cli 本体与官方插件的实际版本、命令集合、参数一律以 `v-cli doctor` 与 `v-cli agent index --json` 的实时输出为准。
 
 ## 能力发现协议（核心规则，必须遵守）
@@ -29,7 +29,7 @@ description: >
 
 ## 首调规范
 
-**首次调用任何 official 插件命令（`v-cli xlmerge …`、`v-cli unity …`）前，必须先运行 `v-cli agent docs <命令名>` 读取该插件包内的 AGENTS.md 规范正本。** 使用规范、快速流程与禁止事项以插件自身 AGENTS.md 为准。
+**首次调用任何 official 插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`）前，必须先运行 `v-cli agent docs <命令名>` 读取该插件包内的 AGENTS.md 规范正本。** 使用规范、快速流程与禁止事项以插件自身 AGENTS.md 为准。
 
 官方插件命令在子进程中运行（stdio 继承）：v-cli 只做路由，不解析、不改写插件输出；插件 `--help`/`--json` 等参数由插件自己消费。插件对 worktree 的写入/提交行为以插件清单的安全标签为准；**未经显式 flag 不得 push**。
 
@@ -111,6 +111,15 @@ receipt 属工程本地生成物；就绪以当前路由的完整文件树校验
 - 全量：`-- command run_tests --mode EditMode --async_tests`（立即返回）→ 轮询 `-- command test_status` 至 `completed` 拿完整 Summary。
 - 小范围：`--filter <命名空间或类>` 通常数秒内同步返回完整 Summary。
 - 5 秒让位机制只保证 CLI 子进程存活并把输出写入 `Library/editor-pipeline-cli/exec-logs/*.log`，不改变 Editor 侧任务的同步语义；让出后不要重复发起同一命令，取消用 `-- command cancel_tests`。
+
+## 官方插件三：figma（仅 win32）
+
+- 用于标记 Figma 界面导出、staging 契约校验、Unity 转换包安装与 UGUI Prefab 构建；目标工程需要 Unity 2022.3 和 Vant Framework。
+- 首次调用先读 `v-cli agent docs figma`，参数以 `v-cli agent describe figma --json` 为准。
+- 用户配置按工程保存在 `~/.config/figma-to-uprefab/config.json`；token 来自 `FIGMA_ACCESS_TOKEN` 或工程配置段，不写入仓库。
+- `export` 只导出 source manifest、节点 PNG 和根索引；source → IR → Prefab 由嵌入式 C# 转换器完成。
+- 构建前使用 `contract --allow-missing-ir`；安装转换包并 `build` 后运行完整 `contract`。
+- 输出限于 staging；不自动迁入正式资源目录、不写 UIConfig。NGUI 当前不支持。
 
 ## 典型流程
 
