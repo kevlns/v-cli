@@ -32,6 +32,11 @@ export const OFFICIAL_PLUGINS: OfficialPluginSpec[] = [
     command: "figma",
     description: "Figma 标记界面导出、契约校验与 Unity UGUI staging Prefab 构建（Windows-first）",
   },
+  {
+    package: "@kevlns/ship-cli",
+    command: "ship",
+    description: "已构建游戏的 Steam/微信小游戏校验、预演和测试通道上传",
+  },
 ];
 
 /** 官方命令名（本地插件不可占用） */

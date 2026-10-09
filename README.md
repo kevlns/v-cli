@@ -11,7 +11,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/kevlns/v-cli/test.yml?branch=main&style=flat-square&label=CI)](https://github.com/kevlns/v-cli/actions/workflows/test.yml)
 [![license](https://img.shields.io/github/license/kevlns/v-cli?style=flat-square&color=2e8b57)](./LICENSE)
 
-[Getting started](#getting-started) · [API](#api) · [Examples](#examples) · [Package family](#package-family)
+[Getting started](#getting-started) · [Examples](#examples) · [API](#api) · [Package family](#package-family)
 
 </div>
 
@@ -20,7 +20,7 @@
 ## Why v-cli?
 
 v-cli 让你**用一个命令沉淀所有个人小工具**，而不用为每个工具建仓库、发包、记命令。
-它被设计为**依赖极少、秒级启动、写个文件就能扩展**，与 kevlns 工具家族的其余部分可自由组合。
+它被设计为**依赖极少、秒级启动、写个文件就能扩展**。
 
 - **插件化架构** - 内置命令走注册表随版本发布；本地插件放进 `~/.v-cli/commands/` 立即生效，无需发版
 - **官方插件白名单** - `@kevlns/xlmerge`（`xlmerge`）、`@kevlns/u-cli-mod`（`unity`）与 `@kevlns/figma-to-uprefab`（`figma`），安装后在子进程中运行
@@ -37,7 +37,7 @@ v-cli 让你**用一个命令沉淀所有个人小工具**，而不用为每个�
 # 正式版直接安装
 npm install -g @kevlns/v-cli
 
-# 或直接从 GitHub 仓库安装开发版本
+# 或从 GitHub 仓库安装开发版本
 npm install -g git+https://github.com/kevlns/v-cli.git
 ```
 
@@ -53,7 +53,7 @@ v-cli ts 1710000000   # 时间戳互转
 
 ### AI Agent 快速开始
 
-v-cli 内置 AGENTS.md 随包发布，AI Agent 自行发现读取，无需人工粘贴：
+v-cli 内置 AGENTS.md 随包发布，AI Agent 可自行发现读取：
 
 ```bash
 v-cli agent docs                    # 内置 AGENTS.md 原文（--json 拿 package/version/sha256/content）
@@ -65,26 +65,26 @@ v-cli agent init .                  # （可选）把 AGENTS.md 写入工作区�
 `agent init [directory]`（默认当前目录）：已存在 AGENTS.md 时默认拒绝退出 1（`--force` 原子覆盖）；
 `--dry-run` 只报告不写入；符号链接目标 fail-closed 拒绝；`--json` 输出稳定结果。
 
-### 控制器命令（官方插件）
+### 官方插件命令
+
+官方插件随 v-cli 一起安装（精确固定依赖），装完即可路由：
 
 ```bash
-npm install -g @kevlns/xlmerge@2.0.0   # 安装后即可
 v-cli xlmerge --repo <repo> detect            # 路由到 xlmerge 子进程
 v-cli xlmerge --repo <repo> resolve
 
 # Unity 工具链（仅 Windows 主机可用；其他平台 v-cli 会拒绝路由并说明原因）
-npm install -g @kevlns/u-cli-mod@0.2.3
 v-cli unity doctor <project>
 
 # Figma -> Unity UGUI staging Prefab（仅 Windows，依赖 Vant Framework）
-v-cli agent docs figma
+v-cli agent docs figma                         # 首调必读
 v-cli figma --help
 v-cli figma config init --project C:/path/to/UnityProject
 v-cli figma export <fileKey> --project C:/path/to/UnityProject
-v-cli figma contract --project C:/path/to/UnityProject --allow-missing-ir
+v-cli figma contract --project C:/path/to/UnityProject --allow-missing-ir   # 构建前（允许缺 IR）
 v-cli figma unity install --project C:/path/to/UnityProject
 v-cli figma build --project C:/path/to/UnityProject
-v-cli figma contract --project C:/path/to/UnityProject
+v-cli figma contract --project C:/path/to/UnityProject                     # 构建后（完整校验）
 ```
 
 `v-cli <插件命令> …` 的执行语义：插件在**子进程**中运行（stdio 继承），
@@ -99,7 +99,7 @@ v-cli figma contract --project C:/path/to/UnityProject
 export default {
   name: "hello",
   description: "示例插件",
-  apiVersion: 1, // v-cli 0.2 起的插件契约版本，必填
+  apiVersion: 1, // 插件契约版本（要求 v-cli >= 0.2），必填
   register(program, ctx) {
     program.action(() => ctx.log.result("hello world"));
   },
@@ -113,7 +113,7 @@ v-cli hello           # hello world
 v-cli plugin list     # [local] hello 已出现
 ```
 
-> 旧版插件（无 `apiVersion: 1`）会被拒绝并给出解释性错误，请补上字段后重载。
+> 缺少 `apiVersion: 1` 的插件会被拒绝并给出解释性错误，补上字段后重载即可。
 > 本地插件不能占用内置命令名（`doctor`/`plugin`/`ts`/`agent`/`help`）或官方命令名（`xlmerge`/`unity`/`figma`）。
 
 ### 在脚本中消费输出
@@ -123,7 +123,7 @@ v-cli ts 1710000000 --json | jq .seconds
 v-cli --json ts 1710000000 | jq .seconds   # 前置全局 --json 同样生效
 ```
 
-## `--json` 语义（v-cli 0.2）
+## `--json` 语义
 
 - **前置全局**：`v-cli --json <cmd> …` —— `--json` 出现在首个命令词之前时被 v-cli 消费，`ctx.json` 为真
 - **命令自有**：`<cmd> --json …` —— 属于该命令：内置命令（`ts`、`doctor`、`plugin list`、`agent index`、`agent describe`、`agent docs`、`agent init`）各自声明 `--json` 并消费；官方插件命令则**原样转发**给插件
@@ -151,7 +151,7 @@ v-cli --json ts 1710000000 | jq .seconds   # 前置全局 --json 同样生效
 interface CliCommand {
   name: string;                                    // 子命令名
   description: string;
-  apiVersion: 1;                                   // v-cli 0.2 起必填
+  apiVersion: 1;                                   // 插件契约版本，必填（要求 v-cli >= 0.2）
   hidden?: boolean;
   agent?: {                                        // agent 索引元数据（可选）
     whenToUse?: string;                            // 什么场景该调用
@@ -199,11 +199,11 @@ npm run check:agents      # AGENTS.md 漂移检查（默认与已安装依赖比
 npm run pack:guard        # 发布内容护栏：身份/必需文件/禁止内容/依赖精确固定/engines
 npm run test:package      # 发布后安装冒烟：npm pack → 隔离 prefix 全局安装 → 运行 bin wrapper 断言
 npm run check             # build + typecheck + test + check:agents + pack:guard
-
-> 发版除 `npm version` 外，还需同步全仓版本断言（`grep -rn 旧版本号 tests/ scripts/ src/` 应为零，含 pack-guard 依赖精确固定与 smoke 的插件版本期望），再打 tag。
 ```
 
-> `@kevlns/xlmerge@2.0.0` / `@kevlns/u-cli-mod@0.2.3` / `@kevlns/figma-to-uprefab@0.1.1` 随 `npm install` 装入仓库
+> 发版除 `npm version` 外，还需同步全仓版本断言（`grep -rn 旧版本号 tests/ scripts/ src/` 应为零，含 pack-guard 依赖精确固定与 smoke 的插件版本期望），再打 tag。
+
+> `@kevlns/xlmerge@2.0.1` / `@kevlns/u-cli-mod@0.2.4` / `@kevlns/figma-to-uprefab@0.1.2` 随 `npm install` 装入仓库
 > node_modules，`check:agents` 的 installed-deps 检查即为最终形态；预发布阶段需要以本地
 > 清单 bootstrap 时显式传 `--manifest <path>`。
 
@@ -211,12 +211,12 @@ npm run check             # build + typecheck + test + check:agents + pack:guard
 
 kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）。
 
-| Package | Purpose | Status |
+| Package | Purpose | Version |
 | --- | --- | --- |
-| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.14 |
-| [`xlmerge`](https://github.com/kevlns/xlmerge) | Git 中 .xlsx/.xlsm 冲突可视化解决工具 | v2.0.0 |
-| [`u-cli-mod`](https://github.com/kevlns/u-cli-mod) | Unity 精确版本路由 + CLI + pipeline 包（Windows-first） | v0.2.3 |
-| [`figma-to-uprefab`](https://github.com/kevlns/figma-to-uprefab) | Figma 导出、契约校验与 Unity UGUI staging Prefab 构建 | v0.1.1 |
+| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.15 |
+| [`xlmerge`](https://github.com/kevlns/xlmerge) | Git 中 .xlsx/.xlsm 冲突可视化解决工具 | v2.0.1 |
+| [`u-cli-mod`](https://github.com/kevlns/u-cli-mod) | Unity 精确版本路由 + CLI + pipeline 包（Windows-first） | v0.2.4 |
+| [`figma-to-uprefab`](https://github.com/kevlns/figma-to-uprefab) | Figma 导出、契约校验与 Unity UGUI staging Prefab 构建 | v0.1.2 |
 
 ## Compatibility
 
@@ -227,7 +227,7 @@ kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）
 
 CLI 核心逻辑以单文件 ESM（`dist/cli.mjs`）分发，运行时依赖 `commander` 与三个官方插件包
 （`@kevlns/xlmerge`、`@kevlns/u-cli-mod`、`@kevlns/figma-to-uprefab`，均为精确固定版本；安装 v-cli 时一起安装，
-未装时 `plugin list`/`doctor`/`agent index` 会诚实报告 `missing` 状态）。
+未装时 `plugin list`/`doctor`/`agent index` 会如实报告 `missing` 状态）。
 
 ## Contributing
 
@@ -250,3 +250,17 @@ Released under the [MIT License](./LICENSE).
 Part of the **kevlns** tool family.
 
 </div>
+# ship 官方插件
+
+`ship` 已加入官方插件白名单，`@kevlns/ship-cli@0.1.1` 为随包官方依赖。将 ship-cli 安装到与 v-cli 相同的 npm prefix 后自动发现；发布后随 v-cli 安装，不需要本地插件注册。
+
+```bash
+v-cli plugin list --json
+v-cli agent docs ship
+v-cli agent describe ship --json
+v-cli ship doctor --json
+v-cli ship wx validate --json
+v-cli ship wx push --version 1.0.0 --json
+```
+
+缺失时会显示 missing。完整 Steam / 微信小游戏流程以 ship 的随包规范为准。隔离接入验证：`npm run test:package`，覆盖四个官方依赖的安装、发现、清单、规范哈希与真实子进程路由。

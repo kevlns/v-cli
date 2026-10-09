@@ -49,8 +49,8 @@ afterEach(() => {
 });
 
 describe("CLI 集成", () => {
-  it("--version 为 0.2.14", () => {
-    expect(run(["--version"], newHome()).trim()).toBe("0.2.14");
+  it("--version 为 0.2.15", () => {
+    expect(run(["--version"], newHome()).trim()).toBe("0.2.15");
   });
 
   it("--help 列出内置命令与官方插件命令", () => {
@@ -81,16 +81,16 @@ describe("CLI 集成", () => {
     expect(data).toHaveProperty("node");
     expect(data.configWritable).toBe(true);
     expect(Array.isArray(data.officialPlugins)).toBe(true);
-    expect(data.officialPlugins.length).toBe(3);
+    expect(data.officialPlugins.length).toBe(4);
     // 官方依赖已随 npm install 装入仓库 → 诚实 available（unity 非 win32 为 platform-mismatch）
     const xl = data.officialPlugins.find((o: { name: string }) => o.name === "xlmerge");
     expect(xl).toBeTruthy();
     expect(xl.status).toBe("available");
-    expect(xl.version).toBe("2.0.0");
+    expect(xl.version).toBe("2.0.1");
     const unity = data.officialPlugins.find((o: { name: string }) => o.name === "unity");
     expect(unity).toBeTruthy();
     expect(unity.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
-    if (process.platform === "win32") expect(unity.version).toBe("0.2.3");
+    if (process.platform === "win32") expect(unity.version).toBe("0.2.4");
   });
 
   it("plugin list 包含内置命令与官方插件行（官方依赖已安装）", () => {
@@ -98,13 +98,13 @@ describe("CLI 集成", () => {
     const names = data.filter((r: { source: string }) => r.source === "builtin").map((r: { name: string }) => r.name);
     for (const name of ["doctor", "plugin", "ts", "agent"]) expect(names).toContain(name);
     const official = data.filter((r: { source: string }) => r.source === "official");
-    expect(official.map((r: { name: string }) => r.name).sort()).toEqual(["figma", "unity", "xlmerge"]);
+    expect(official.map((r: { name: string }) => r.name).sort()).toEqual(["figma", "ship", "unity", "xlmerge"]);
     const xl = official.find((r: { name: string }) => r.name === "xlmerge");
     expect(xl.status).toBe("available");
-    expect(xl.version).toBe("2.0.0");
+    expect(xl.version).toBe("2.0.1");
     const unity = official.find((r: { name: string }) => r.name === "unity");
     expect(unity.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
-    if (process.platform === "win32") expect(unity.version).toBe("0.2.3");
+    if (process.platform === "win32") expect(unity.version).toBe("0.2.4");
   });
 
   it("plugin list --json 在 fixture 下官方插件可用（win32 主机含 unity）", () => {
@@ -147,7 +147,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const out = run(["xlmerge", "detect"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.env).toEqual({
-      V_CLI_HOST_VERSION: "0.2.14",
+      V_CLI_HOST_VERSION: "0.2.15",
       V_CLI_PLUGIN_API: "1",
       V_CLI_INVOKED_BY: "v-cli",
     });
@@ -170,7 +170,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const home = newHome();
     const info = JSON.parse(run(["agent", "describe", "figma", "--json"], home));
     expect(info.package).toBe("@kevlns/figma-to-uprefab");
-    expect(info.version).toBe("0.1.1");
+    expect(info.version).toBe("0.1.2");
     expect(info.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
     const docs = JSON.parse(run(["agent", "docs", "figma", "--json"], home));
     expect(docs.package).toBe(info.package);
@@ -184,7 +184,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
     const projectKey = home.replace(/\\/g, "/").toLowerCase();
     expect(config.projects[projectKey].uiSystem).toBe("UGUI");
-    expect(run(["figma", "--version"], home).trim()).toBe("0.1.1");
+    expect(run(["figma", "--version"], home).trim()).toBe("0.1.2");
   });
 
   it.skipIf(process.platform === "win32")("figma 命令在非 win32 平台拒绝路由", () => {

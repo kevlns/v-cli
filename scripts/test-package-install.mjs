@@ -3,9 +3,9 @@
  * test:package — 发布后安装冒烟测试（真实 npm 全局安装）。
  *
  * 流程：npm pack 生成 tgz → 在隔离临时 prefix 中做一次真实 `npm install --global`，
- * 官方依赖 @kevlns/xlmerge@2.0.0 / @kevlns/u-cli-mod@0.2.3 / @kevlns/figma-to-uprefab@0.1.1 由 registry
+ * 官方依赖 xlmerge / u-cli-mod / figma-to-uprefab / ship-cli 由 registry
  * 正常解析安装 → 通过 npm 生成的 bin wrapper（非直接运行 dist/cli.mjs）执行 CLI，断言：
- *   - `--version` 为 0.2.14；
+ *   - `--version` 为 0.2.15；
  *   - `plugin list --json` 报告 xlmerge available；unity 在 win32 为 available、
  *     非 win32 为 platform-mismatch；figma 同样遵循 Windows 平台门禁；
  *   - `agent index --json` / `agent describe --json` 暴露官方清单全量元数据
@@ -30,10 +30,10 @@ import { createHash } from "node:crypto";
 
 const ROOT = process.cwd();
 const IS_WIN = process.platform === "win32";
-const VERSION = "0.2.14";
-const XL_VERSION = "2.0.0";
-const UNITY_VERSION = "0.2.3";
-const FIGMA_VERSION = "0.1.1";
+const VERSION = "0.2.15";
+const XL_VERSION = "2.0.1";
+const UNITY_VERSION = "0.2.4";
+const FIGMA_VERSION = "0.1.2";
 const STREAM_CAP = 4000;
 
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -176,7 +176,7 @@ function smoke(filename) {
       ["install", "--global", "--prefix", prefix, "--no-audit", "--no-fund", path.join(ROOT, filename)],
       { cwd: ROOT, env, timeout: 300_000 },
     );
-    for (const dep of ["@kevlns/xlmerge", "@kevlns/u-cli-mod", "@kevlns/figma-to-uprefab"]) {
+    for (const dep of ["@kevlns/xlmerge", "@kevlns/u-cli-mod", "@kevlns/figma-to-uprefab", "@kevlns/ship-cli"]) {
       assert(
         installedDepPath(prefix, dep),
         `npm 全局安装后未能解析到官方依赖 ${dep}（registry 解析失败？）`,
@@ -184,6 +184,17 @@ function smoke(filename) {
     }
 
     const runOpts = { cwd: work, env };
+    {
+      const shipRows = JSON.parse(cliExpectOk(prefix, ["plugin", "list", "--json"], runOpts));
+      assert(shipRows.some(row => row.name === "ship" && row.status === "available" && row.version === "0.1.1"), "ship 没有被自动发现");
+      const shipDesc = JSON.parse(cliExpectOk(prefix, ["agent", "describe", "ship", "--json"], runOpts));
+      assert(hasFullMeta(shipDesc.commands?.find(c => c.path.join(" ") === "wx push")), "ship wx push 清单元数据不完整");
+      const shipDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "ship", "--json"], runOpts));
+      assert(shipDocs.package === "@kevlns/ship-cli" && shipDocs.sha256 === sha256(shipDocs.content), "ship 随包规范读取失败");
+      assert(cliExpectOk(prefix, ["ship", "--version"], runOpts).trim() === "0.1.1", "ship 路由未到真实插件");
+      assert(cliExpectOk(prefix, ["ship", "wx", "push", "--help"], runOpts).includes("--version <text>"), "ship 上传参数与工具版本参数未解耦");
+      console.log("[test:package] ship: 自动发现、完整清单、规范哈希、真实命令路由通过");
+    }
 
     // 2) --version
     const version = cliExpectOk(prefix, ["--version"], runOpts).trim();

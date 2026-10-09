@@ -227,7 +227,7 @@ const DOCS_HELP_TEXT = [
 
 const INIT_HELP_TEXT = [
   "把当前 @kevlns/v-cli 包内置 AGENTS.md 原样写入 <目录>/AGENTS.md，AI Agent 会自动读取工作区文档；",
-  "同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等，清单见 src/core/agent-dirs.ts），无匹配目录则跳过。",
+  "同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等），无匹配目录则跳过。",
   "",
   "参数：",
   "  [directory]  目标目录，默认当前工作目录；必须已存在且为目录",

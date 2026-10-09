@@ -1,7 +1,7 @@
 ---
 name: v-cli
 description: >
-  使用 kevlns 的个人工具箱 CLI（v-cli）处理配置表冲突、Unity 工程精确版本工具链与 Figma 转 Unity UGUI Prefab。当任务提到 v-cli、xlmerge、
+  使用 kevlns 的个人工具箱 CLI（v-cli）处理配置表冲突、Unity 工程精确版本工具链、Figma 转 Unity UGUI Prefab 和 Steam/微信小游戏交付。当任务提到 v-cli、xlmerge、ship-cli、
   unity / figma 命令、figma-to-uprefab、配置表 .xlsx/.xlsm Git 冲突处理、Unity CLI 安装、Unity 工程诊断/体检（doctor）、
   com.unity.pipeline 适配包安装、v-cli agent init 工作区初始化时使用本 skill。
 ---
@@ -14,12 +14,12 @@ description: >
 - 命令分三类：
   - **builtin**（内置）：`doctor`（环境体检）、`plugin list/path`（插件管理）、`ts`（时间戳互转）、`agent index/describe/docs/init`（agent 引导）。
   - **local**：`~/.v-cli/commands/` 下的本地插件。
-  - **official**（官方插件，经 v-cli 路由）：`xlmerge`、`unity`、`figma`。
+  - **official**（官方插件，经 v-cli 路由）：`xlmerge`、`unity`、`figma`，以及`ship`。
 - **本文件不写死任何版本号**：v-cli 本体与官方插件的实际版本、命令集合、参数一律以 `v-cli doctor` 与 `v-cli agent index --json` 的实时输出为准。
 
 ## 能力发现协议（核心规则，必须遵守）
 
-**一切能力、参数、用法以 v-cli 自己的 agent 命令输出为准，严禁无头搜索 npm 安装目录、源码或 README 猜测用法。**
+**一切能力、参数、用法以 v-cli 自己的 agent 命令输出为准，严禁自行翻查 npm 安装目录、源码或 README 来猜测用法。**
 
 - `v-cli agent docs` — 输出 v-cli 内置 AGENTS.md（宿主规范全文；`--json` 含 sha256/content）。
 - `v-cli agent index --json` — 枚举全部命令（builtin/local/official）与 agent 元数据，获取最新命令集合。
@@ -35,18 +35,18 @@ description: >
 
 ## 工程初始化（agent init）
 
-- `v-cli agent init [目录] [--force] [--dry-run] [--json]`：把内置 AGENTS.md 写入工作区，并把随包的 v-cli skill 装配到该目录下匹配的 agent 技能目录（如 `.claude/skills`、`.agent/skill`、`AgentHome/skills` 等，清单见 `src/core/agent-dirs.ts`）；无匹配目录则跳过。
-- **强制约束**：只能在本仓 Git 根目录执行，先 `git rev-parse --show-toplevel` 定位并切换到根，禁止在任何子目录执行。
+- `v-cli agent init [目录] [--force] [--dry-run] [--json]`：把内置 AGENTS.md 写入工作区，并把随包的 v-cli skill 装配到该目录下匹配的 agent 技能目录（如 `.claude/skills`、`.agent/skill`、`AgentHome/skills` 等）；无匹配目录则跳过。
+- **强制约束**：只能在目标工程的 Git 根目录执行，先 `git rev-parse --show-toplevel` 定位并切换到根，禁止在任何子目录执行。
 - 命中以下任一场景必须执行一次：① `v-cli` 未安装（先确认 Node.js >= 20 与 npm 可用，`npm install -g @kevlns/v-cli`，用 `v-cli --version` 与 `v-cli agent index --json` 验证）；② 项目内 skill（`<技能目录>/v-cli/SKILL.md`）缺失。两个场景同时命中只执行一次；命令用单数 `agent`，不得写成 `v-cli agents …`。
 - 产物与归属：
-  - 根 `AGENTS.md` 为**工具生成物**（建议纳入 `.gitignore`），禁止手改；需要更新内容时升级 v-cli 后重跑 init。
+  - 根 `AGENTS.md` 为**工具生成物**（建议纳入 `.gitignore`），禁止手改；需要更新内容时升级 v-cli 后重跑 `agent init --force`。
   - `AGENTS.md` 已存在且未加 `--force` 时**整体拒绝**，不做任何改动；`--force` 同时覆盖 AGENTS.md 与 skill。
   - **skill 同步**：随包版本是唯一权威——已有 `v-cli/SKILL.md` 一律按随包刷新（本地修改被覆盖并提示）；随包没有的文件（项目扩展，如 `PROJECT.md`）默认保留，`--force` 时完全同步。项目不要直接改 `SKILL.md`，专属内容写扩展文件。
 - 先 `--dry-run --json` 预览目标与动作（含 `skill.assembled[].action` 与 `overwrite`），再实际写入。
 
 ## 官方插件一：xlmerge（跨平台）
 
-Git 中 `.xlsx` / `.xlsm` 策划表/配置表冲突的公式感知可视化解决工具（三向 Sheet/行/列/Cell diff + 本地 UI + 原子写回与提交）。
+Git 中 `.xlsx` / `.xlsm` 策划表/配置表冲突的公式感知可视化解决工具（三向 Sheet/行/Cell diff + 本地 UI + 原子写回与提交）。
 
 - 命令面：`detect`、`filter add`、`prepare`、`resolve`、`launch`、`apply`（参数以 `v-cli agent describe xlmerge --json` 为准）。
 - 正常流程（只做命令路由，不做表格分析）：
@@ -138,3 +138,9 @@ v-cli unity exec <project> -- command run_tests --mode EditMode --async_tests   
 v-cli xlmerge --repo . detect                                       # 配置表：只读检测
 v-cli xlmerge --repo . launch                                       # 有冲突时启动本地 UI，把 url 交给用户
 ```
+
+## 游戏交付插件 ship
+
+对已构建游戏进行 Steam / 微信小游戏校验、扫码预览或开发版上传时，先 `v-cli agent describe ship --json` 确认可用，再读取 `v-cli agent docs ship`。`ship` 是官方插件，与 v-cli 安装在同一 npm prefix 后自动发现；缺失时报告 missing，安装需要对应任务授权。
+
+选择正确工程后执行 `v-cli ship --project <工程目录> doctor --json`，检查体检 ok 和 fail 项。具体平台命令、上传授权边界、凭据和体积口径以 ship 随包规范为准。Steam preview 不上传；微信 preview 调用服务并返回二维码路径。正式发布由平台后台处理。

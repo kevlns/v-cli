@@ -7,24 +7,25 @@
 
 ## 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.2.14
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.2.15
 - 命令分三类：builtin（内置）、local（~/.v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
-  **最新、live 的命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
+  **命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
 - AI Agent 引导文档：`v-cli agent docs` 输出本文件原文（`--json` 含 sha256/content）；
   `v-cli agent init .` 把它写入工作区（已存在默认拒绝，`--force` 覆盖，`--dry-run` 预览；符号链接目标 fail-closed）；
-  同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等，清单见 src/core/agent-dirs.ts），无匹配则跳过；
+  同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等），无匹配则跳过；
   随包版本是规范唯一权威：同名 SKILL.md 一律按随包版本刷新（本地修改会被覆盖并提示）；随包没有的文件（项目扩展，如 PROJECT.md）默认保留，`--force` 时完全同步
-- **首次调用规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，
+- **首调规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，
   掌握该插件包内 `AGENTS.md`；使用规范、快速流程与禁止事项以插件 AGENTS.md 为准。
-- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`）在子进程中运行（stdio 继承）：v-cli 只做路由，
+- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`、`v-cli ship …`）在子进程中运行（stdio 继承）：v-cli 只做路由，
+- `ship` 是随包官方插件（@kevlns/ship-cli），随 v-cli 安装并自动发现；先运行 `v-cli agent docs ship`、`v-cli ship doctor --json`，再按 Steam / 微信小游戏流程执行。缺失时明确报告 missing，不在运行时自动安装。
   不解析、不改写插件的 stdout/stderr；插件 `--help`/`--json` 等参数由插件自己消费
 - 插件对 worktree 的写入/提交行为以插件清单 v-cli.plugin.json 的 `agent.safety` 为准：
   v-cli 不替插件做 diff/write-back/commit；**未经显式 flag 不得 push**
 
 ## @kevlns/figma-to-uprefab — 命令 `v-cli figma …`
 
-**版本**：0.1.1
+**版本**：0.1.2
 **描述**：Figma REST -> staging-only Unity UGUI prefabs. Node orchestrates export/contract/install/build; the embedded Unity Editor package (source manifest + approximation overlay -> IR -> Prefab) is the only source->IR converter.
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
@@ -33,9 +34,20 @@
 **首次调用前必读**：`v-cli agent docs figma`（插件包内 AGENTS.md 规范正本）
 **实时参数/命令**：`v-cli agent describe figma --json`
 
+## @kevlns/ship-cli — 命令 `v-cli ship …`
+
+**版本**：0.1.1
+**描述**：Cross-platform game shipping CLI: offline validation + packaging + push to platform test channels. Steam (steamcmd/SteamPipe VDF builds, branch set-live guard) and WeChat mini games (structure/size validation, miniprogram-ci preview QR and dev-version upload). Never publishes to players on its own.
+**平台**：win32, linux, darwin
+
+**何时使用**：Shipping a built game to distribution platforms: packaging/upload to Steam (depot builds via steamcmd) or WeChat mini games (dev-version upload via miniprogram-ci), plus offline package validation and environment preflight. NOT for: making content player-visible (Steam default-branch set-live, WeChat review submission/release/gray rollout are always human steps in platform backends), building engine players (produce artifacts first), or account/credential setup beyond pointing at env vars.
+
+**首次调用前必读**：`v-cli agent docs ship`（插件包内 AGENTS.md 规范正本）
+**实时参数/命令**：`v-cli agent describe ship --json`
+
 ## @kevlns/u-cli-mod — 命令 `v-cli unity …`
 
-**版本**：0.2.3
+**版本**：0.2.4
 **描述**：Pin a Unity project to its exact editor version route, download the verified Unity CLI and install the adapted com.unity.pipeline package for Unity 2022 (Windows-first, non-official Unity tooling).
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
@@ -46,7 +58,7 @@
 
 ## @kevlns/xlmerge — 命令 `v-cli xlmerge …`
 
-**版本**：2.0.0
+**版本**：2.0.1
 **描述**：Formula-aware visual resolver for Git merge conflicts in .xlsx/.xlsm planning tables: three-way sheet/row/cell diff, local UI, atomic write-back and commit.
 **平台**：darwin, linux, win32
 
