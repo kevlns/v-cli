@@ -49,8 +49,8 @@ afterEach(() => {
 });
 
 describe("CLI 集成", () => {
-  it("--version 为 0.2.15", () => {
-    expect(run(["--version"], newHome()).trim()).toBe("0.2.15");
+  it("--version 为 0.2.16", () => {
+    expect(run(["--version"], newHome()).trim()).toBe("0.2.16");
   });
 
   it("--help 列出内置命令与官方插件命令", () => {
@@ -81,7 +81,7 @@ describe("CLI 集成", () => {
     expect(data).toHaveProperty("node");
     expect(data.configWritable).toBe(true);
     expect(Array.isArray(data.officialPlugins)).toBe(true);
-    expect(data.officialPlugins.length).toBe(4);
+    expect(data.officialPlugins.length).toBe(5);
     // 官方依赖已随 npm install 装入仓库 → 诚实 available（unity 非 win32 为 platform-mismatch）
     const xl = data.officialPlugins.find((o: { name: string }) => o.name === "xlmerge");
     expect(xl).toBeTruthy();
@@ -98,7 +98,7 @@ describe("CLI 集成", () => {
     const names = data.filter((r: { source: string }) => r.source === "builtin").map((r: { name: string }) => r.name);
     for (const name of ["doctor", "plugin", "ts", "agent"]) expect(names).toContain(name);
     const official = data.filter((r: { source: string }) => r.source === "official");
-    expect(official.map((r: { name: string }) => r.name).sort()).toEqual(["figma", "ship", "unity", "xlmerge"]);
+    expect(official.map((r: { name: string }) => r.name).sort()).toEqual(["art", "figma", "ship", "unity", "xlmerge"]);
     const xl = official.find((r: { name: string }) => r.name === "xlmerge");
     expect(xl.status).toBe("available");
     expect(xl.version).toBe("2.0.1");
@@ -147,7 +147,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const out = run(["xlmerge", "detect"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.env).toEqual({
-      V_CLI_HOST_VERSION: "0.2.15",
+      V_CLI_HOST_VERSION: "0.2.16",
       V_CLI_PLUGIN_API: "1",
       V_CLI_INVOKED_BY: "v-cli",
     });

@@ -1,7 +1,7 @@
 ---
 name: v-cli
 description: >
-  使用 kevlns 的个人工具箱 CLI（v-cli）处理配置表冲突、Unity 工程精确版本工具链、Figma 转 Unity UGUI Prefab 和 Steam/微信小游戏交付。当任务提到 v-cli、xlmerge、ship-cli、
+  使用 kevlns 的个人工具箱 CLI（v-cli）处理配置表冲突、Unity 工程精确版本工具链、Figma 转 Unity UGUI Prefab、Steam/微信小游戏交付与美术工坊风格分析、生图和图编辑。当任务提到 v-cli、xlmerge、ship-cli、美术工坊、art-workshop、
   unity / figma 命令、figma-to-uprefab、配置表 .xlsx/.xlsm Git 冲突处理、Unity CLI 安装、Unity 工程诊断/体检（doctor）、
   com.unity.pipeline 适配包安装、v-cli agent init 工作区初始化时使用本 skill。
 ---
@@ -14,7 +14,7 @@ description: >
 - 命令分三类：
   - **builtin**（内置）：`doctor`（环境体检）、`plugin list/path`（插件管理）、`ts`（时间戳互转）、`agent index/describe/docs/init`（agent 引导）。
   - **local**：`~/.v-cli/commands/` 下的本地插件。
-  - **official**（官方插件，经 v-cli 路由）：`xlmerge`、`unity`、`figma`，以及`ship`。
+  - **official**（官方插件，经 v-cli 路由）：`xlmerge`、`unity`、`figma`、`ship`、`art`。
 - **本文件不写死任何版本号**：v-cli 本体与官方插件的实际版本、命令集合、参数一律以 `v-cli doctor` 与 `v-cli agent index --json` 的实时输出为准。
 
 ## 能力发现协议（核心规则，必须遵守）
@@ -29,7 +29,7 @@ description: >
 
 ## 首调规范
 
-**首次调用任何 official 插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`）前，必须先运行 `v-cli agent docs <命令名>` 读取该插件包内的 AGENTS.md 规范正本。** 使用规范、快速流程与禁止事项以插件自身 AGENTS.md 为准。
+**首次调用任何 official 插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`、`v-cli ship …`、`v-cli art …`）前，必须先运行 `v-cli agent docs <命令名>` 读取该插件包内的 AGENTS.md 规范正本。** 使用规范、快速流程与禁止事项以插件自身 AGENTS.md 为准。
 
 官方插件命令在子进程中运行（stdio 继承）：v-cli 只做路由，不解析、不改写插件输出；插件 `--help`/`--json` 等参数由插件自己消费。插件对 worktree 的写入/提交行为以插件清单的安全标签为准；**未经显式 flag 不得 push**。
 
@@ -144,3 +144,7 @@ v-cli xlmerge --repo . launch                                       # 有冲突�
 对已构建游戏进行 Steam / 微信小游戏校验、扫码预览或开发版上传时，先 `v-cli agent describe ship --json` 确认可用，再读取 `v-cli agent docs ship`。`ship` 是官方插件，与 v-cli 安装在同一 npm prefix 后自动发现；缺失时报告 missing，安装需要对应任务授权。
 
 选择正确工程后执行 `v-cli ship --project <工程目录> doctor --json`，检查体检 ok 和 fail 项。具体平台命令、上传授权边界、凭据和体积口径以 ship 随包规范为准。Steam preview 不上传；微信 preview 调用服务并返回二维码路径。正式发布由平台后台处理。
+
+## 美术工坊插件 art
+
+风格分析与核心冻结、统一风格多工程生图或编辑现有图片时，先读 `v-cli agent docs art`，用 `v-cli agent describe art --json` 查看参数。再用 `v-cli art config show`、`v-cli art agent index` 选择外部工作目录、正确工程与核心。完整规范用 `v-cli art agent docs` 查看；按 style、generate、edit 三个模块执行。plan 和 --dry 不调用远程模型，真实分析、生图与编辑按任务授权执行。

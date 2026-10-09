@@ -23,7 +23,7 @@ v-cli 让你**用一个命令沉淀所有个人小工具**，而不用为每个�
 它被设计为**依赖极少、秒级启动、写个文件就能扩展**。
 
 - **插件化架构** - 内置命令走注册表随版本发布；本地插件放进 `~/.v-cli/commands/` 立即生效，无需发版
-- **官方插件白名单** - `@kevlns/xlmerge`（`xlmerge`）、`@kevlns/u-cli-mod`（`unity`）与 `@kevlns/figma-to-uprefab`（`figma`），安装后在子进程中运行
+- **官方插件白名单** - `@kevlns/xlmerge`（`xlmerge`）、`@kevlns/u-cli-mod`（`unity`）、`@kevlns/figma-to-uprefab`（`figma`）、`@kevlns/ship-cli`（`ship`）和 `@kevlns/art-workshop`（`art`），随包安装并在子进程中运行
 - **容错加载** - 单个插件语法错误、契约不符或注册异常只会被跳过并报告，绝不阻断其他命令
 - **双通道输出** - 结果走 stdout（可管道、可脚本化），诊断走 stderr
 - **agent 友好** - `agent docs`/`agent init` 让 AI Agent 自举读取引导文档；`agent index/describe` 输出统一索引与完整元数据；仓库内 AGENTS.md 自动生成并有漂移检查
@@ -114,7 +114,7 @@ v-cli plugin list     # [local] hello 已出现
 ```
 
 > 缺少 `apiVersion: 1` 的插件会被拒绝并给出解释性错误，补上字段后重载即可。
-> 本地插件不能占用内置命令名（`doctor`/`plugin`/`ts`/`agent`/`help`）或官方命令名（`xlmerge`/`unity`/`figma`）。
+> 本地插件不能占用内置命令名（`doctor`/`plugin`/`ts`/`agent`/`help`）或官方命令名（`xlmerge`/`unity`/`figma`/`ship`/`art`）。
 
 ### 在脚本中消费输出
 
@@ -213,7 +213,7 @@ kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）
 
 | Package | Purpose | Version |
 | --- | --- | --- |
-| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.15 |
+| [`v-cli`](https://github.com/kevlns/v-cli) | 个人工具箱 CLI（本仓库） | v0.2.16 |
 | [`xlmerge`](https://github.com/kevlns/xlmerge) | Git 中 .xlsx/.xlsm 冲突可视化解决工具 | v2.0.1 |
 | [`u-cli-mod`](https://github.com/kevlns/u-cli-mod) | Unity 精确版本路由 + CLI + pipeline 包（Windows-first） | v0.2.4 |
 | [`figma-to-uprefab`](https://github.com/kevlns/figma-to-uprefab) | Figma 导出、契约校验与 Unity UGUI staging Prefab 构建 | v0.1.2 |
@@ -225,7 +225,7 @@ kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）
 | Node.js | `20` and later |
 | TypeScript | `5.6` and later（仅开发时） |
 
-CLI 核心逻辑以单文件 ESM（`dist/cli.mjs`）分发，运行时依赖 `commander` 与三个官方插件包
+CLI 核心逻辑以单文件 ESM（`dist/cli.mjs`）分发，运行时依赖 `commander` 与五个官方插件包
 （`@kevlns/xlmerge`、`@kevlns/u-cli-mod`、`@kevlns/figma-to-uprefab`，均为精确固定版本；安装 v-cli 时一起安装，
 未装时 `plugin list`/`doctor`/`agent index` 会如实报告 `missing` 状态）。
 
@@ -263,4 +263,8 @@ v-cli ship wx validate --json
 v-cli ship wx push --version 1.0.0 --json
 ```
 
-缺失时会显示 missing。完整 Steam / 微信小游戏流程以 ship 的随包规范为准。隔离接入验证：`npm run test:package`，覆盖四个官方依赖的安装、发现、清单、规范哈希与真实子进程路由。
+缺失时会显示 missing。完整 Steam / 微信小游戏流程以 ship 的随包规范为准。隔离接入验证：`npm run test:package`，覆盖五个官方依赖的安装、发现、清单、规范哈希与真实子进程路由。
+
+# 美术工坊官方插件 art
+
+`@kevlns/art-workshop@0.1.2` 随 v-cli 安装，自动发现为 `art`。先读 `v-cli agent docs art`，用 `v-cli agent describe art --json` 查看完整参数，再用 `v-cli art config show` 与 `v-cli art agent index` 选择正确工程。风格分析与冻结用 `v-cli art style`，文生图用 `v-cli art generate`，图编辑用 `v-cli art edit`。参数与独立工具一致；本地配置、冻结核心及全部外部资源路径一致。`v-cli art --help` 与 `v-cli art agent docs` 提供入口和完整规范。

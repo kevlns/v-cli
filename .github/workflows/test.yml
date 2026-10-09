@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
-      # 四个官方插件由 registry 安装，
+      # 五个官方插件由 registry 安装，
       # npm ci 由 package-lock 完全锁定，无需 sibling 仓库。
       - name: Install deps
         run: npm ci
