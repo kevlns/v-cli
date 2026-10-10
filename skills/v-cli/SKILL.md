@@ -147,4 +147,4 @@ v-cli xlmerge --repo . launch                                       # 有冲突�
 
 ## 美术工坊插件 art
 
-风格分析与核心冻结、统一风格多工程生图或编辑现有图片时，先读 `v-cli agent docs art`，用 `v-cli agent describe art --json` 查看参数。再用 `v-cli art config show`、`v-cli art agent index` 选择外部工作目录、正确工程与核心。完整规范用 `v-cli art agent docs` 查看；按 style、generate、edit 三个模块执行。plan 和 --dry 不调用远程模型，真实分析、生图与编辑按任务授权执行。
+风格分析与核心冻结、统一风格多工程生图或编辑现有图片时，先读 `v-cli agent docs art`，用 `v-cli agent describe art --json` 查看参数。再用 `v-cli art config show`、`v-cli art agent index` 和 `v-cli art config validate` 确认外部工作目录、工程、核心及后端。一份配置可声明远程百炼与本地 ComfyUI；风格分析仍使用远程百炼。本地先 `workflow list`、`doctor` 检查内置或自定义工作流与环境；默认内置 vant-builtin-qwen-image-2.1-Q4-8GB，服务在任务执行时懒启动。按 style、generate、edit 执行，先 plan 和 run --dry；冻结计划不能同时传 --backend。单次任务用 `task list/status/wait/cancel`，`shutdown` 停止全部任务并关闭服务。完整模式规范用 `v-cli art agent docs` 查看；真实分析、生图与编辑按任务授权执行。

@@ -178,7 +178,7 @@ function renderCore(plugins, version) {
   lines.push("- **首调规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，");
   lines.push("  掌握该插件包内 `AGENTS.md`；使用规范、快速流程与禁止事项以插件 AGENTS.md 为准。");
   lines.push("- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`、`v-cli ship …`、`v-cli art …`）在子进程中运行（stdio 继承）：v-cli 只做路由，");
-  lines.push("- `art` 是随包美术工坊插件；先读 `v-cli agent docs art`，用 `v-cli art config show` 和 `v-cli art agent index` 选择正确工程与核心。真实分析和生成按任务授权执行。");
+  lines.push("- `art` 是随包美术工坊插件；先读 `v-cli agent docs art`，用 `v-cli art config show`、`v-cli art agent index` 和 `v-cli art config validate` 确认工程、核心及远程/本地后端。本地执行前用 `workflow list` 和 `doctor` 检查工作流与环境；任务控制用 `task list/status/wait/cancel`，`shutdown` 停止全部任务并关闭服务。真实分析和生成按任务授权执行。");
   lines.push("- `ship` 是随包官方插件（@kevlns/ship-cli），随 v-cli 安装并自动发现；先运行 `v-cli agent docs ship`、`v-cli ship doctor --json`，再按 Steam / 微信小游戏流程执行。缺失时明确报告 missing，不在运行时自动安装。");
   lines.push("  不解析、不改写插件的 stdout/stderr；插件 `--help`/`--json` 等参数由插件自己消费");
   lines.push("- 插件对 worktree 的写入/提交行为以插件清单 v-cli.plugin.json 的 `agent.safety` 为准：");

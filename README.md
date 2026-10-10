@@ -267,4 +267,4 @@ v-cli ship wx push --version 1.0.0 --json
 
 # 美术工坊官方插件 art
 
-`@kevlns/art-workshop@0.1.2` 随 v-cli 安装，自动发现为 `art`。先读 `v-cli agent docs art`，用 `v-cli agent describe art --json` 查看完整参数，再用 `v-cli art config show` 与 `v-cli art agent index` 选择正确工程。风格分析与冻结用 `v-cli art style`，文生图用 `v-cli art generate`，图编辑用 `v-cli art edit`。参数与独立工具一致；本地配置、冻结核心及全部外部资源路径一致。`v-cli art --help` 与 `v-cli art agent docs` 提供入口和完整规范。
+`@kevlns/art-workshop@0.2.1` 随 v-cli 安装，自动发现为 `art`。先读 `v-cli agent docs art`，用 `v-cli agent describe art --json` 查看完整参数，再用 `v-cli art config show`、`v-cli art agent index` 与 `v-cli art config validate` 确认工程及后端。一份结构化配置同时声明远程百炼和本地 ComfyUI；风格分析仍使用远程百炼，生图及编辑按所选后端执行。本地默认内置 `vant-builtin-qwen-image-2.1-Q4-8GB` 工作流，也可指定自定义 API 工作流；执行前用 `v-cli art workflow list` 和 `v-cli art doctor` 检查环境。服务在执行任务时懒启动，`task list/status/wait/cancel` 管理单次任务，`shutdown` 停止全部任务并关闭服务。风格分析与冻结用 `style`，文生图用 `generate`，图编辑用 `edit`；先 plan 和 run --dry，再按任务授权执行。各模式的调用规范以随包指南为准。

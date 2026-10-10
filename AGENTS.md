@@ -7,7 +7,7 @@
 
 ## 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.2.17
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.2.18
 - 命令分三类：builtin（内置）、local（~/.v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
   **命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
@@ -18,7 +18,7 @@
 - **首调规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，
   掌握该插件包内 `AGENTS.md`；使用规范、快速流程与禁止事项以插件 AGENTS.md 为准。
 - 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`、`v-cli ship …`、`v-cli art …`）在子进程中运行（stdio 继承）：v-cli 只做路由，
-- `art` 是随包美术工坊插件；先读 `v-cli agent docs art`，用 `v-cli art config show` 和 `v-cli art agent index` 选择正确工程与核心。真实分析和生成按任务授权执行。
+- `art` 是随包美术工坊插件；先读 `v-cli agent docs art`，用 `v-cli art config show`、`v-cli art agent index` 和 `v-cli art config validate` 确认工程、核心及远程/本地后端。本地执行前用 `workflow list` 和 `doctor` 检查工作流与环境；任务控制用 `task list/status/wait/cancel`，`shutdown` 停止全部任务并关闭服务。真实分析和生成按任务授权执行。
 - `ship` 是随包官方插件（@kevlns/ship-cli），随 v-cli 安装并自动发现；先运行 `v-cli agent docs ship`、`v-cli ship doctor --json`，再按 Steam / 微信小游戏流程执行。缺失时明确报告 missing，不在运行时自动安装。
   不解析、不改写插件的 stdout/stderr；插件 `--help`/`--json` 等参数由插件自己消费
 - 插件对 worktree 的写入/提交行为以插件清单 v-cli.plugin.json 的 `agent.safety` 为准：
@@ -26,11 +26,11 @@
 
 ## @kevlns/art-workshop — 命令 `v-cli art …`
 
-**版本**：0.1.3
-**描述**：美术工坊：多工程风格分析与核心冻结、统一风格文生图及图编辑，支持计划预演与人工验收。
+**版本**：0.2.1
+**描述**：美术工坊：风格分析与冻结、远程百炼和本地 ComfyUI 生图/编辑、配置环境检查、任务控制及人工验收。
 **平台**：win32, linux, darwin
 
-**何时使用**：视觉风格分析与冻结、基于正确工程核心生成统一风格图片、按修改与保留计划编辑现有图片，或查看 refs 分类、预演与验收。先 config show 和 agent index 选择工程，远程分析及生图须有任务授权。
+**何时使用**：风格分析/冻结、远程或本地生图/编辑、工作流检测及任务管理。先 config show、agent index、config validate；远程核对百炼入口与认证，本地核对 workflow/doctor，具体任务先 plan 和 run --dry；按已有授权执行，任务失败读取 diagnostic，产物人工验收。
 
 **首次调用前必读**：`v-cli agent docs art`（插件包内 AGENTS.md 规范正本）
 **实时参数/命令**：`v-cli agent describe art --json`

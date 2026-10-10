@@ -37,7 +37,7 @@ export const OFFICIAL_PLUGINS: OfficialPluginSpec[] = [
     command: "ship",
     description: "已构建游戏的 Steam/微信小游戏校验、预演和测试通道上传",
   },
-  { package: "@kevlns/art-workshop", command: "art", description: "美术工坊：风格分析与冻结、多工程文生图及图编辑" },
+  { package: "@kevlns/art-workshop", command: "art", description: "美术工坊：风格分析与冻结、远程或本地 ComfyUI 生图及编辑、环境检查与任务管理" },
 ];
 
 /** 官方命令名（本地插件不可占用） */
