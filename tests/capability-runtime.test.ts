@@ -19,6 +19,7 @@ import type {
   CapabilityImplementation,
   CapabilityProvider,
   JsonSchema,
+  ProviderBindingContract,
   ResourceAuthorizer,
 } from "../src/core/execution/types";
 import type { ProcessOutcome } from "../src/core/execution/executor";
@@ -29,8 +30,15 @@ afterEach(() => {
   for (const p of projects.splice(0)) p.cleanup();
 });
 
+const DEMO_BINDING: ProviderBindingContract = {
+  schema: { type: "object", additionalProperties: false, properties: {} },
+  pathFields: [],
+  resolve: () => ({ ok: true, dirs: {}, files: {}, warnings: [] }),
+};
+
 function tempProject(): TempProject {
-  const project = makeTempProject();
+  // demo provider 的绑定段：无路径字段（外壳 + 契约校验链路仍然全走）
+  const project = makeTempProject({ config: { schemaVersion: 1, bindings: { demo: {} } } });
   projects.push(project);
   return project;
 }
@@ -89,6 +97,7 @@ function makeRegistry(options: {
     description: "样例 provider",
     status: () => ({ state: "available", detail: "ok" }),
     capabilities: () => [{ descriptor, implementation }],
+    binding: DEMO_BINDING,
   };
   const registry = new CapabilityRegistry();
   try {
@@ -624,10 +633,34 @@ describe("审查回归：取消、授权与异步验收", () => {
     const result = await runCapability(registry, request(p, { signal: c.signal }));
     expect(called).toBe(false); expect(result.execution.status).toBe("cancelled"); expect(result.execution.attempts).toBe(0);
   });
-  it("异步受理或 pending 不能自称 passed", async () => {
-    for (const lifecycle of ["accepted", "running"] as const) {
-      const p = tempProject(); const registry = makeRegistry({ execute: async () => ({ execution: { status: "succeeded", lifecycle }, acceptance: { status: "passed", reason: "受理", evidence: [{ kind: "declared", description: "ok" }] }, output: { echo: "x" } }) });
-      expect((await runCapability(registry, request(p))).acceptance.status).toBe("not-run");
+  it("验收红线：任务仅被接受（accepted）或状态不可解释（unknown）时不得自称 passed", async () => {
+    for (const lifecycle of ["accepted", "unknown"] as const) {
+      const p = tempProject();
+      const registry = makeRegistry({
+        execute: async () => ({
+          execution: { status: "succeeded", lifecycle },
+          acceptance: { status: "passed", reason: "受理", evidence: [{ kind: "declared", description: "ok" }] },
+          output: { echo: "x" },
+        }),
+      });
+      const result = await runCapability(registry, request(p));
+      expect(result.acceptance.status, lifecycle).toBe("not-run");
+      expect(result.acceptance.reason).toContain("降级");
+    }
+  });
+
+  it("六态契约：任务级 running/failed/cancelled 允许能力自身的 passed（观察/关联/取消类验收目标）", async () => {
+    for (const lifecycle of ["completed", "running", "failed", "cancelled"] as const) {
+      const p = tempProject();
+      const registry = makeRegistry({
+        execute: async () => ({
+          execution: { status: "succeeded", lifecycle },
+          acceptance: { status: "passed", reason: "观察/关联成立", evidence: [{ kind: "declared", description: "ok" }] },
+          output: { echo: "x" },
+        }),
+      });
+      const result = await runCapability(registry, request(p));
+      expect(result.acceptance.status, lifecycle).toBe("passed");
     }
   });
   it("授权钩子非布尔 true 按拒绝处理", async () => {

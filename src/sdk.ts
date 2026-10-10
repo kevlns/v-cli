@@ -37,7 +37,14 @@ export type {
   PreconditionDeclaration,
   PreconditionOutcome,
   ProjectBindingInfo,
+  ProviderBindingContract,
+  ProviderBindingResolution,
+  ProviderBindingResolutionError,
+  ProviderBindingResolutionOk,
+  ProviderBindingResolveInput,
+  ProviderDefaultBinding,
   ProviderInfo,
+  ProviderPathField,
   ProviderState,
   ProviderStatus,
   ResourceAuthorizationDecision,
@@ -75,10 +82,20 @@ export {
   type CapabilityRuntimeDeps,
 } from "./core/execution/runtime";
 
+export {
+  EXECUTION_HANDLE_VERSION,
+  buildExecutionHandle,
+  canonicalize,
+  verifyExecutionHandle,
+  type ExecutionHandle,
+  type ExecutionHandleSeed,
+  type HandleVerification,
+} from "./core/execution/handle";
+
 export { NodeProcessExecutor } from "./core/execution/executor";
 export type { ProcessExecutor, ProcessInvocation, ProcessOutcome } from "./core/execution/executor";
 
-export { createDefaultRegistry, type DefaultRegistryOptions } from "./core/execution/default-registry";
+export { createDefaultRegistry, type DefaultRegistryOptions } from "./default-registry";
 
 export {
   JSON_TYPES,
@@ -92,7 +109,10 @@ export {
   buildDoctorArgv,
   buildExecArgv,
   createUnityProvider,
+  unityBindingContract,
+  type UnityBinding,
   type UnityProviderDeps,
+  type UnityTestMode,
 } from "./providers/unity";
 
 export {
@@ -102,14 +122,16 @@ export {
   initProjectConfig,
   inspectProject,
   loadProjectConfig,
-  renderDefaultConfig,
+  renderProjectConfig,
+  resolveBindings,
+  toProviderSet,
   validateProjectCliConfig,
   type InitProjectConfigResult,
   type LoadProjectConfigResult,
   type ProjectCliConfig,
   type ProjectInspection,
-  type UnityBinding,
-  type UnityTestMode,
+  type ProviderSet,
+  type ResolvedProviderBinding,
 } from "./core/project/config";
 
 export {

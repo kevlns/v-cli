@@ -28,6 +28,8 @@ export interface ToolOutput {
   /** 规范化载荷：data.result ?? data ?? parsed */
   payload: unknown;
   errorMessage: string | null;
+  /** 信封 OK 但 data.result 字符串不可二次解析（载荷级不可解释，与信封级 parseError 区分） */
+  payloadParseError: string | null;
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -73,10 +75,10 @@ function readErrorMessage(value: Record<string, unknown>): string | null {
 export function interpretToolOutput(stdout: string): ToolOutput {
   const { parsed, parseError } = parseToolStdout(stdout);
   if (parsed === null) {
-    return { parsed: null, parseError, envelope: false, success: null, payload: null, errorMessage: null };
+    return { parsed: null, parseError, envelope: false, success: null, payload: null, errorMessage: null, payloadParseError: null };
   }
   if (!isPlainObject(parsed)) {
-    return { parsed, parseError: null, envelope: false, success: null, payload: parsed, errorMessage: null };
+    return { parsed, parseError: null, envelope: false, success: null, payload: parsed, errorMessage: null, payloadParseError: null };
   }
 
   const outerSuccess = typeof parsed.success === "boolean" ? parsed.success : null;
@@ -85,12 +87,18 @@ export function interpretToolOutput(stdout: string): ToolOutput {
   const success = outerSuccess === false || innerSuccess === false ? false : innerSuccess ?? outerSuccess;
 
   let payload: unknown = parsed;
+  let payloadParseError: string | null = null;
   if (data) {
     payload = data.result !== undefined ? data.result : data;
   }
   // Pipeline 状态命令返回序列化的 result；仅展开这个已知协议字段。
   if (data && typeof data.result === "string") {
-    try { payload = JSON.parse(data.result); } catch { /* 非 JSON 的文本保持原样 */ }
+    try {
+      payload = JSON.parse(data.result);
+    } catch (err) {
+      // 非 JSON 的文本保持原样，但标记载荷级不可解释（调用方按协议错误处理，不混入"值域外"）
+      payloadParseError = err instanceof Error ? err.message : String(err);
+    }
   }
 
   const errorMessage = success === false ? readErrorMessage(data ?? {}) ?? readErrorMessage(parsed) : null;
@@ -102,6 +110,7 @@ export function interpretToolOutput(stdout: string): ToolOutput {
     success,
     payload,
     errorMessage,
+    payloadParseError,
   };
 }
 

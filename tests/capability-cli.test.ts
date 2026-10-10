@@ -81,7 +81,7 @@ describe("CLI：project init / inspect", () => {
     expect(help.stdout).toContain("capability");
   });
 
-  it("project init 创建 .vant/config/v-cli.json，重复执行被拒绝（退出 1）", () => {
+  it("project init 创建 .vant/config/v-cli.json（按注册集合生成默认段），重复执行被拒绝（退出 1）", () => {
     const root = newTemp();
     const first = run(["project", "init", "--project", root, "--json"]);
     expect(first.status).toBe(0);
@@ -98,6 +98,25 @@ describe("CLI：project init / inspect", () => {
     expect(second.stderr).toContain("不覆盖已有配置");
   });
 
+  it("project init --binding 完整覆盖默认段；未知 Provider / 非法 JSON 被拒绝", () => {
+    const root = newTemp();
+    const ok = run([
+      "project", "init", "--project", root, "--json",
+      "--binding", `unity={"projectDir":"Client","editorVersion":"2022.3.62f3c1"}`,
+    ]);
+    expect(ok.status).toBe(0);
+    const config = JSON.parse(readFileSync(join(root, ".vant", "config", "v-cli.json"), "utf-8"));
+    expect(config.bindings.unity).toEqual({ projectDir: "Client", editorVersion: "2022.3.62f3c1" });
+
+    const badProvider = run(["project", "init", "--project", newTemp(), "--json", "--binding", "nope={}"]);
+    expect(badProvider.status).toBe(1);
+    expect(badProvider.stderr).toContain("未知 Provider 绑定覆盖");
+
+    const badJson = run(["project", "init", "--project", newTemp(), "--json", "--binding", "unity={bad"]);
+    expect(badJson.status).toBe(1);
+    expect(badJson.stderr).toContain("不是合法 JSON");
+  });
+
   it("project init 不覆盖 Vant 的 project.json", () => {
     const root = newTemp();
     const vantFile = join(root, ".vant", "config", "project.json");
@@ -108,17 +127,22 @@ describe("CLI：project init / inspect", () => {
     expect(readFileSync(vantFile, "utf-8")).toBe(before);
   });
 
-  it("project inspect --json 报告配置/绑定/状态目录/provider（只读）", () => {
+  it("project inspect --json 报告配置/逐 Provider 绑定/状态目录/provider（只读）", () => {
     const { root } = initProject();
     const r = run(["project", "inspect", "--project", root, "--json"]);
     expect(r.status).toBe(0);
     const payload = r.json as {
-      config: { valid: boolean; bindingDirs: Record<string, string> };
+      config: {
+        valid: boolean;
+        providerBindings: { providerId: string; state: string; dirs: Record<string, string> }[];
+      };
       state: { exists: boolean; operationCount: number };
       providers: { id: string; state: string; capabilityCount: number }[];
     };
     expect(payload.config.valid).toBe(true);
-    expect(payload.config.bindingDirs.unity).toBe(join(root, "Client"));
+    const unityBinding = payload.config.providerBindings.find((b) => b.providerId === "unity")!;
+    expect(unityBinding.state).toBe("bound");
+    expect(unityBinding.dirs.projectDir).toBe(join(root, "Client"));
     expect(payload.state.exists).toBe(false);
     const unity = payload.providers.find((p) => p.id === "unity")!;
     expect(unity.capabilityCount).toBe(7);
@@ -156,7 +180,7 @@ describe("CLI：capability list / describe（不执行工具）", () => {
     );
   });
 
-  it("describe --json 输出完整契约（schema/前置条件/副作用/资源/重试）", () => {
+  it("describe --json 输出完整契约（schema/前置条件/副作用/资源/重试/绑定契约）", () => {
     const r = run(["capability", "describe", "unity.test-status", "--json"]);
     expect(r.status).toBe(0);
     const d = r.json as {
@@ -167,7 +191,10 @@ describe("CLI：capability list / describe（不执行工具）", () => {
       sideEffects: { kind: string }[];
       resources: { mode: string }[];
       retry: { safe: boolean; maxAttempts: number };
-      provider: { id: string };
+      provider: {
+        id: string;
+        binding: { pathFields: { field: string; kind: string; required: boolean }[]; schema: { type: string } };
+      };
     };
     expect(d.id).toBe("unity.test-status");
     expect(d.inputSchema.additionalProperties).toBe(false);
@@ -176,6 +203,8 @@ describe("CLI：capability list / describe（不执行工具）", () => {
     expect(d.sideEffects.map((s) => s.kind)).toContain("process-exec");
     expect(d.retry.maxAttempts).toBeGreaterThanOrEqual(1);
     expect(d.provider.id).toBe("unity");
+    expect(d.provider.binding.pathFields).toEqual([{ field: "projectDir", kind: "dir", required: true }]);
+    expect(d.provider.binding.schema.type).toBe("object");
   });
 
   it("未知 capability / 未知 provider → 退出 1", () => {

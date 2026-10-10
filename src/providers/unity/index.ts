@@ -31,7 +31,11 @@ import type {
   ImplementationOutcome,
   JsonSchema,
   PreconditionChecker,
+  ProviderBindingContract,
 } from "../../core/execution/types";
+import type { ProjectRoot } from "../../core/project/paths";
+import { PROJECT_CLI_CONFIG_RELATIVE } from "../../core/project/config";
+import { comparePathForm } from "../../core/project/paths";
 import {
   classifyRecompileStatus,
   classifyTestStatus,
@@ -49,7 +53,63 @@ import {
 } from "./protocol";
 
 export const UNITY_PROVIDER_ID = "unity";
-export const UNITY_PROVIDER_VERSION = "0.1.0";
+export const UNITY_PROVIDER_VERSION = "0.2.0";
+
+/** bindings.unity 绑定段（Provider 自包含契约） */
+export type UnityTestMode = "EditMode" | "PlayMode";
+
+export interface UnityBinding {
+  /** 相对工程根的 Unity 工程目录（"." 表示工程根自身） */
+  projectDir: string;
+  /** 可选：钉扎 Editor 版本（doctor 返回不一致即前置条件不满足） */
+  editorVersion?: string;
+  /** 可选：test-start 未显式传 mode 时的默认值 */
+  testMode?: UnityTestMode;
+}
+
+const unityBindingSchema: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["projectDir"],
+  properties: {
+    projectDir: { type: "string", minLength: 1, description: "相对工程根的 Unity 工程目录（. 表示工程根本身）" },
+    editorVersion: { type: "string", minLength: 1, description: "可选：钉扎 Editor 版本" },
+    testMode: { type: "string", enum: ["EditMode", "PlayMode"], description: "可选：test-start 默认测试模式" },
+  },
+};
+
+/** 绑定契约：schema 声明 + 路径字段 + 语义校验（路径解析走核心注入的统一入口） */
+export const unityBindingContract: ProviderBindingContract = {
+  schema: unityBindingSchema,
+  pathFields: [{ field: "projectDir", kind: "dir", required: true }],
+  resolve: ({ project, raw, resolveInsideProject }) => {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      return { ok: false, errors: ["bindings.unity 必须是对象"] };
+    }
+    const section = raw as UnityBinding;
+    const errors: string[] = [];
+    if (typeof section.projectDir !== "string" || section.projectDir.length === 0) {
+      errors.push('bindings.unity.projectDir 必须是非空字符串（相对工程根）');
+    }
+    if (section.editorVersion !== undefined && (typeof section.editorVersion !== "string" || section.editorVersion.length === 0)) {
+      errors.push("bindings.unity.editorVersion 出现时必须是非空字符串");
+    }
+    if (section.testMode !== undefined && section.testMode !== "EditMode" && section.testMode !== "PlayMode") {
+      errors.push('bindings.unity.testMode 出现时必须是 "EditMode" 或 "PlayMode"');
+    }
+    if (errors.length > 0) return { ok: false, errors };
+    // 路径违规（PathSafetyError）向上穿透：核心归类为 unsafe-binding
+    const resolved = resolveInsideProject(project, section.projectDir, "bindings.unity.projectDir");
+    return { ok: true, dirs: { projectDir: resolved.path }, files: {}, section: { ...section }, warnings: [] };
+  },
+};
+
+/** 从执行上下文取本 provider 的已校验绑定段 */
+function unityBinding(ctx: CapabilityExecutionContext): UnityBinding | null {
+  const binding = ctx.binding;
+  if (binding === null || typeof binding !== "object") return null;
+  return binding as unknown as UnityBinding;
+}
 const UNITY_BACKEND_PACKAGE = "@kevlns/u-cli-mod";
 const UNITY_BACKEND_COMMAND = "unity";
 /** 进程硬超时相对 --wait 预算的余量（ms）：包装器让出后仍要给 CLI 收尾时间 */
@@ -168,7 +228,7 @@ const compileStatusOutputSchema: JsonSchema = {
   additionalProperties: false,
   required: ["status", "statusSource"],
   properties: {
-    status: nullableString("recompile_status 值"),
+    status: nullableString("recompile_status 值（观察语义：最近一次编译，不证明属于哪次触发；引擎级编译事件会覆写，跨会话残留）"),
     statusSource: nullableString("读取到的字段路径"),
   },
 };
@@ -200,7 +260,7 @@ const testStatusOutputSchema: JsonSchema = {
     "reportSources",
   ],
   properties: {
-    status: nullableString("test_status 值"),
+    status: nullableString("test_status 值（观察语义：最近一次运行，不证明属于哪次启动；新启动顶替旧运行，跨会话残留旧报告）"),
     statusSource: nullableString("读取到的字段路径"),
     completed: { type: "boolean" },
     failCount: nullableInteger("失败数（候选路径未命中为 null）"),
@@ -361,6 +421,35 @@ interface InvocationResult {
   command: { file: string; args: string[] };
   rawOutput: { stdout: string; stderr: string; stdoutTruncated?: boolean; stderrTruncated?: boolean };
   toolInfo: { name: string; version?: string; path?: string };
+  /** 信封回显的目标工程与绑定不一致（GAP-U2：响应不被采信，由调用方转为协议错误） */
+  targetMismatch: { echoed: string; expected: string } | null;
+}
+
+/** 读取信封 data.target.projectPath 回显（字段来源：2026-10-10 实测，见协议样本 §1） */
+function readEchoedProjectPath(parsed: unknown): string | null {
+  if (
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) &&
+    typeof (parsed as { data?: unknown }).data === "object" && (parsed as { data: unknown }).data !== null
+  ) {
+    const data = (parsed as { data: Record<string, unknown> }).data;
+    const target = data.target;
+    if (typeof target === "object" && target !== null && !Array.isArray(target)) {
+      const projectPath = (target as Record<string, unknown>).projectPath;
+      if (typeof projectPath === "string" && projectPath.length > 0) return projectPath;
+    }
+  }
+  return null;
+}
+
+function unityPathsEqual(a: string, b: string): boolean {
+  const norm = comparePathForm;
+  if (norm(a) === norm(b)) return true;
+  // 8.3 短名 / 与 Editor 持有形式不同的词形：两侧都存在时按最终路径（realpath）比较
+  try {
+    return norm(fs.realpathSync(a)) === norm(fs.realpathSync(b));
+  } catch {
+    return false;
+  }
 }
 
 /* ------------------------------- provider 工厂 ------------------------------- */
@@ -430,6 +519,15 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     if (argv[0] === "exec" && tool.success === null && !tool.parseError) {
       tool.parseError = "Unity exec 输出缺少 success 信封";
     }
+    // GAP-U2：exec 信封回显目标工程身份，与绑定目录核对（不一致 → 不采信该响应）
+    let targetMismatch: { echoed: string; expected: string } | null = null;
+    if (argv[0] === "exec" && tool.parsed !== null) {
+      const echoed = readEchoedProjectPath(tool.parsed);
+      if (echoed !== null && !unityPathsEqual(echoed, cwd)) {
+        targetMismatch = { echoed, expected: cwd };
+        ctx.log.warn(`信封回显目标工程 ${echoed} 与绑定 ${cwd} 不一致：响应不被采信`);
+      }
+    }
     return {
       outcome,
       tool,
@@ -446,11 +544,12 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         version: backend.info.version,
         path: backend.info.bin,
       },
+      targetMismatch,
     };
   }
 
   function findUnityDir(ctx: CapabilityExecutionContext): string | null {
-    return ctx.bindingDirs.unity ?? null;
+    return ctx.bindingDirs.projectDir ?? null;
   }
 
   /* --------------------------- 前置条件检查实现 --------------------------- */
@@ -561,7 +660,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     }
     const doctor = normalizeDoctor(result.tool.parsed);
     const readiness = doctorReadiness(doctor);
-    const pin = ctx.config.bindings.unity?.editorVersion;
+    const pin = unityBinding(ctx)?.editorVersion;
     const pinMismatch = pin !== undefined && doctor.editorVersion !== pin;
     if (!readiness.ready || pinMismatch) {
       const reasons = [...readiness.reasons];
@@ -626,16 +725,25 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
 
   /* ------------------------------- 通用执行辅助 ------------------------------- */
 
-  function failedBeforeRun(result: InvocationResult, label: string): ImplementationOutcome {
+  function failedBeforeRun(
+    result: InvocationResult,
+    label: string,
+    followUpCapabilityId: string | null = null,
+  ): ImplementationOutcome {
     const exec = executionFromProcess(result.outcome);
+    const pending = followUpCapabilityId !== null;
     return {
       execution: exec,
       acceptance: {
         status: "not-run",
         reason: `${label} 未成功（${exec.status}），无验收结论`,
-        pending: false,
+        pending,
         evidence: [evidenceExit(result.outcome)],
       },
+      followUp:
+        pending && followUpCapabilityId !== null
+          ? [{ capabilityId: followUpCapabilityId, hint: `调用未取得结论（超时/中断只说明调用结束，不推断底层已停止）：重试或轮询` }]
+          : undefined,
       command: result.command,
       tool: result.toolInfo,
       rawOutput: result.rawOutput,
@@ -667,7 +775,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     };
   }
 
-  function unparseable(result: InvocationResult, label: string): ImplementationOutcome {
+  function unparseable(result: InvocationResult, label: string, capabilityId: string): ImplementationOutcome {
     return {
       execution: {
         status: "unknown",
@@ -683,10 +791,11 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
       },
       acceptance: {
         status: "not-run",
-        reason: "工具输出不可解释，无验收结论",
-        pending: false,
+        reason: "工具输出不可解释，无验收结论；重新执行本能力取得结论",
+        pending: true,
         evidence: [evidenceExit(result.outcome)],
       },
+      followUp: [{ capabilityId, hint: "重新执行本能力以取得结论" }],
       command: result.command,
       tool: result.toolInfo,
       rawOutput: result.rawOutput,
@@ -725,6 +834,33 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     };
   }
 
+  /** 信封回显目标工程与绑定不一致（GAP-U2）：响应整体不采信，协议错误 */
+  function targetMismatchOutcome(result: InvocationResult): ImplementationOutcome {
+    return {
+      execution: {
+        status: "failed",
+        lifecycle: "unknown",
+        exitCode: result.outcome.exitCode,
+        signal: result.outcome.signal,
+        error: structuredError(
+          "unity-target-mismatch",
+          "protocol",
+          `Editor 回显目标工程 ${result.targetMismatch!.echoed} 与绑定 ${result.targetMismatch!.expected} 不一致：响应不被采信`,
+          { retryable: false },
+        ),
+      },
+      acceptance: {
+        status: "not-run",
+        reason: "目标工程身份核对失败，未采信响应（不回退其他工程）",
+        pending: false,
+        evidence: [evidenceField("data.target.projectPath 回显", result.targetMismatch!.echoed)],
+      },
+      command: result.command,
+      tool: result.toolInfo,
+      rawOutput: result.rawOutput,
+    };
+  }
+
   async function invokeOrUnavailable(
     argv: string[],
     ctx: CapabilityExecutionContext,
@@ -732,7 +868,9 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     dir: string,
   ): Promise<InvocationResult | ImplementationOutcome> {
     try {
-      return await invoke(argv, ctx, waitSeconds, dir);
+      const result = await invoke(argv, ctx, waitSeconds, dir);
+      if (result.targetMismatch !== null) return targetMismatchOutcome(result);
+      return result;
     } catch (err) {
       return backendUnavailableOutcome(err instanceof Error ? err.message : String(err));
     }
@@ -831,10 +969,10 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     const result = invoked;
     const exec = executionFromProcess(result.outcome);
     const base = { command: result.command, tool: result.toolInfo, rawOutput: result.rawOutput };
-    if (exec.status !== "succeeded") return failedBeforeRun(result, "editor_status");
+    if (exec.status !== "succeeded") return failedBeforeRun(result, "editor_status", "unity.editor-status");
     if (result.tool.success === false) return toolReportedFailure(result, "editor_status");
     if (result.handoff) return statusHandoffOutcome(result, "editor_status", "unity.editor-status");
-    if (result.tool.parseError !== null) return unparseable(result, "editor_status");
+    if (result.tool.parseError !== null) return unparseable(result, "editor_status", "unity.editor-status");
     const { status, source } = extractStatus(result.tool.payload);
     const ready = status === "ready";
     const output = { status, statusSource: source, ready };
@@ -874,7 +1012,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     const extracted = result.tool.parseError === null ? extractStatus(result.tool.payload) : { status: null, source: null };
     const output = { accepted: false, recompileStatus: extracted.status, waitBudgetExpired: result.handoff };
     if (exec.status !== "succeeded") {
-      return { ...failedBeforeRun(result, "recompile 触发"), output };
+      return { ...failedBeforeRun(result, "recompile 触发", "unity.compile-status"), output };
     }
     if (result.tool.success === false) return { ...toolReportedFailure(result, "recompile 触发"), output };
     if (result.handoff || result.tool.parseError !== null) {
@@ -883,7 +1021,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         output,
         execution: {
           status: "unknown",
-          lifecycle: "accepted",
+          lifecycle: "unknown",
           exitCode: result.outcome.exitCode,
           signal: result.outcome.signal,
           error: structuredError(
@@ -916,7 +1054,11 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         evidence: [evidenceField("信封 success", true), evidenceField(extracted.source ?? "recompile 触发响应", extracted.status)],
       },
       followUp: [{ capabilityId: "unity.compile-status", hint: "轮询 recompile_status 直到 completed/up_to_date" }],
-      notes: ["recompile 只表示已请求重编译；完成及错误验收由 unity.compile-status 给出"],
+      notes: [
+        "recompile 只表示已请求重编译；完成及错误验收由 unity.compile-status 给出",
+        "句柄 backendTaskId=null：后端无任务身份协议（GAP-U1），终态关联 unverified，不可用于句柄关联查询",
+      ],
+      handle: { backendTaskId: null },
     };
   };
 
@@ -930,12 +1072,27 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     const result = invoked;
     const exec = executionFromProcess(result.outcome);
     const base = { command: result.command, tool: result.toolInfo, rawOutput: result.rawOutput };
-    if (exec.status !== "succeeded") return failedBeforeRun(result, "recompile_status");
+    if (exec.status !== "succeeded") return failedBeforeRun(result, "recompile_status", "unity.compile-status");
     if (result.tool.success === false) return toolReportedFailure(result, "recompile_status");
     if (result.handoff) {
       return statusHandoffOutcome(result, "recompile_status", "unity.compile-status");
     }
-    if (result.tool.parseError !== null) return unparseable(result, "recompile_status");
+    if (result.tool.parseError !== null) return unparseable(result, "recompile_status", "unity.compile-status");
+    if (result.tool.payloadParseError !== null) {
+      // 调用成功但载荷不可二次解析：与"值域外"分开（调用 succeeded / 任务状态 unknown）
+      return {
+        ...base,
+        output: { status: null, statusSource: null },
+        execution: { ...exec, lifecycle: "unknown" },
+        acceptance: {
+          status: "not-run",
+          reason: `recompile_status 载荷不可解析: ${result.tool.payloadParseError}`,
+          pending: true,
+          evidence: [evidenceExit(result.outcome)],
+        },
+        followUp: [{ capabilityId: "unity.compile-status", hint: "重新执行本能力以取得结论" }],
+      };
+    }
     const { status, source } = extractStatus(result.tool.payload);
     const output = { status, statusSource: source };
     const klass = classifyRecompileStatus(status);
@@ -944,7 +1101,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
       case "completed":
         const compileReport = result.tool.payload as Record<string, unknown>;
         if (compileReport.failed !== false || !Array.isArray(compileReport.errors) || compileReport.errors.length !== 0) {
-          return { ...base, output, execution: exec, acceptance: { status: "failed", reason: "编译状态已结束，但错误报告缺失或存在编译错误", pending: false, evidence: [evidenceField("编译错误报告", compileReport)] } };
+          return { ...base, output, execution: { ...exec, lifecycle: "failed" }, acceptance: { status: "failed", reason: "编译状态已结束，但错误报告缺失或存在编译错误", pending: false, evidence: [evidenceField("编译错误报告", compileReport)] } };
         }
         return {
           ...base,
@@ -961,7 +1118,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         return {
           ...base,
           output,
-          execution: exec,
+          execution: { ...exec, lifecycle: "running" },
           acceptance: {
             status: "not-run",
             reason: `recompile_status=${status}：仍在进行中，继续轮询`,
@@ -974,10 +1131,10 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         return {
           ...base,
           output,
-          execution: exec,
+          execution: { ...exec, lifecycle: "unknown" },
           acceptance: {
             status: "not-run",
-            reason: "recompile_status=idle：没有进行中或已完成的编译记录（可能尚未触发 recompile）",
+            reason: "recompile_status=idle：没有可解释的编译任务状态（可能尚未触发 recompile）",
             pending: false,
             evidence: [evidenceField(source ?? "status", status)],
           },
@@ -986,7 +1143,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         return {
           ...base,
           output,
-          execution: exec,
+          execution: { ...exec, lifecycle: "failed" },
           acceptance: {
             status: "failed",
             reason: `recompile_status=${status}`,
@@ -998,7 +1155,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         return {
           ...base,
           output,
-          execution: exec,
+          execution: { ...exec, lifecycle: "unknown" },
           acceptance: {
             status: "failed",
             reason:
@@ -1015,7 +1172,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
   const testStartExecute: CapabilityImplementation["execute"] = async (input, ctx) => {
     const dir = findUnityDir(ctx);
     if (!dir) return backendUnavailableOutcome("缺少工程目录绑定");
-    const configuredMode = ctx.config.bindings.unity?.testMode;
+    const configuredMode = unityBinding(ctx)?.testMode;
     const mode = typeof input.mode === "string" ? input.mode : configuredMode ?? "EditMode";
     const filter = typeof input.filter === "string" ? input.filter : null;
     const waitSeconds = inputWaitSeconds(input, "unity.test-start");
@@ -1035,7 +1192,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
       waitBudgetExpired: result.handoff,
     };
     if (exec.status !== "succeeded") {
-      return { ...failedBeforeRun(result, "run_tests 启动"), output };
+      return { ...failedBeforeRun(result, "run_tests 启动", "unity.test-status"), output };
     }
     if (result.tool.success === false) return { ...toolReportedFailure(result, "run_tests 启动"), output };
     if (result.handoff || result.tool.parseError !== null) {
@@ -1044,7 +1201,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         output,
         execution: {
           status: "unknown",
-          lifecycle: "accepted",
+          lifecycle: "unknown",
           exitCode: result.outcome.exitCode,
           signal: result.outcome.signal,
           error: structuredError(
@@ -1075,7 +1232,11 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         evidence: [evidenceField("信封 success", true), evidenceField(extracted.source ?? "启动响应", extracted.status)],
       },
       followUp: [{ capabilityId: "unity.test-status", hint: "轮询 test_status 直到 completed 并核对失败数" }],
-      notes: ["本能力固定追加 --async_tests（Unity CLI 同步命令有 30s 硬上限，全量同步必然超时）"],
+      notes: [
+        "本能力固定追加 --async_tests（Unity CLI 同步命令有 30s 硬上限，全量同步必然超时）",
+        "句柄 backendTaskId=null：后端无任务身份协议（GAP-U1），test_status 为观察语义，不可用于句柄关联查询",
+      ],
+      handle: { backendTaskId: null },
     };
   };
 
@@ -1089,12 +1250,27 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     const result = invoked;
     const exec = executionFromProcess(result.outcome);
     const base = { command: result.command, tool: result.toolInfo, rawOutput: result.rawOutput };
-    if (exec.status !== "succeeded") return failedBeforeRun(result, "test_status");
+    if (exec.status !== "succeeded") return failedBeforeRun(result, "test_status", "unity.test-status");
     if (result.tool.success === false) return toolReportedFailure(result, "test_status");
     if (result.handoff) {
       return statusHandoffOutcome(result, "test_status", "unity.test-status");
     }
-    if (result.tool.parseError !== null) return unparseable(result, "test_status");
+    if (result.tool.parseError !== null) return unparseable(result, "test_status", "unity.test-status");
+    if (result.tool.payloadParseError !== null) {
+      // 调用成功但载荷不可二次解析：与"值域外"分开（调用 succeeded / 任务状态 unknown）
+      return {
+        ...base,
+        output: { status: null, statusSource: null, completed: false, failCount: null, failCountSource: null, total: null, reportPresent: false, reportSources: [] },
+        execution: { ...exec, lifecycle: "unknown" },
+        acceptance: {
+          status: "not-run",
+          reason: `test_status 载荷不可解析: ${result.tool.payloadParseError}`,
+          pending: true,
+          evidence: [evidenceExit(result.outcome)],
+        },
+        followUp: [{ capabilityId: "unity.test-status", hint: "重新执行本能力以取得结论" }],
+      };
+    }
     const { status, source } = extractStatus(result.tool.payload);
     const fails = extractFailCount(result.tool.payload);
     const totals = extractTotal(result.tool.payload);
@@ -1177,7 +1353,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         return {
           ...base,
           output,
-          execution: exec,
+          execution: { ...exec, lifecycle: "running" },
           acceptance: {
             status: "not-run",
             reason: `test_status=${status}：测试仍在运行，继续轮询`,
@@ -1190,10 +1366,10 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         return {
           ...base,
           output,
-          execution: exec,
+          execution: { ...exec, lifecycle: "unknown" },
           acceptance: {
             status: "not-run",
-            reason: "test_status=idle：没有可验收的测试运行记录（可能尚未启动）",
+            reason: "test_status=idle：没有可解释的测试任务状态（可能尚未启动）",
             pending: false,
             evidence,
           },
@@ -1202,10 +1378,10 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         return {
           ...base,
           output,
-          execution: exec,
+          execution: { ...exec, lifecycle: "cancelled" },
           acceptance: {
             status: "failed",
-            reason: `test_status=${status}：测试运行已取消，无通过结论`,
+            reason: `test_status=${status}：测试运行已取消（后端确认），无通过结论`,
             pending: false,
             evidence,
           },
@@ -1214,7 +1390,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         return {
           ...base,
           output,
-          execution: exec,
+          execution: { ...exec, lifecycle: "unknown" },
           acceptance: {
             status: "failed",
             reason:
@@ -1248,7 +1424,7 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     });
     const base = { command: result.command, tool: result.toolInfo };
     if (exec.status !== "succeeded") {
-      return { ...failedBeforeRun(result, "cancel_tests"), rawOutput: rawOutput() };
+      return { ...failedBeforeRun(result, "cancel_tests", "unity.test-status"), rawOutput: rawOutput() };
     }
     if (result.tool.success === false) {
       return { ...toolReportedFailure(result, "cancel_tests"), rawOutput: rawOutput() };
@@ -1276,7 +1452,9 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         stdoutParts.push(probe.outcome.stdout);
         stderrParts.push(probe.outcome.stderr);
         const probeExec = executionFromProcess(probe.outcome);
-        if (probeExec.status === "succeeded" && probe.tool.parseError === null && probe.tool.success !== false) {
+        if (probe.targetMismatch !== null) {
+          evidence.push(evidenceField("test_status 探测目标工程不一致", probe.targetMismatch));
+        } else if (probeExec.status === "succeeded" && probe.tool.parseError === null && probe.tool.success !== false) {
           const extracted = extractStatus(probe.tool.payload);
           probeStatus = extracted.status;
           probeStatusSource = extracted.source;
@@ -1311,7 +1489,8 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         ...base,
         output,
         rawOutput: rawOutput(),
-        execution: exec,
+        // 任务级：后端确认取消（调用级 exec 仍为本次 cancel 调用的进程结果）
+        execution: { ...exec, lifecycle: "cancelled" },
         acceptance: {
           status: "passed",
           reason: `取消已确认：${confirmationSource}`,
@@ -1419,7 +1598,8 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
       descriptor: {
         id: "unity.compile-status",
         version: "0.1.0",
-        description: "读取最近一次重编译状态（idle | triggered | compiling | completed | up_to_date）",
+        description:
+          "读取最近一次重编译状态（idle | triggered | compiling | completed | up_to_date）。观察语义：不证明属于哪次触发——引擎级任何编译（含资产导入等）都会覆写该状态，且跨 Editor 会话残留旧终态",
         inputSchema: execInputSchema(),
         outputSchema: compileStatusOutputSchema,
         preconditions: execPreconditions,
@@ -1463,7 +1643,8 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
       descriptor: {
         id: "unity.test-status",
         version: "0.1.0",
-        description: "读取最近一次测试运行状态；completed 且失败数 0 且存在有效报告才判定通过",
+        description:
+          "读取最近一次测试运行状态；completed 且失败数 0 且存在有效报告才判定通过。观察语义：不证明属于哪次启动——新启动会顶替旧运行，状态文件跨 Editor 会话残留旧报告",
         inputSchema: execInputSchema(),
         outputSchema: testStatusOutputSchema,
         preconditions: execPreconditions,
@@ -1499,6 +1680,17 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     id: UNITY_PROVIDER_ID,
     version: UNITY_PROVIDER_VERSION,
     description: "Unity 工程（Windows-first）：体检、Editor 状态、重编译与测试的异步触发/状态/取消",
+    binding: unityBindingContract,
+    defaultBinding: (project: ProjectRoot) => {
+      const warnings: string[] = [];
+      const declared = path.join(project.root, "Client");
+      if (!fs.existsSync(declared)) {
+        warnings.push(
+          `bindings.unity.projectDir="Client" 当前不存在：请按工程实际目录修改 ${PROJECT_CLI_CONFIG_RELATIVE} 或用 --binding unity='{...}' 覆盖`,
+        );
+      }
+      return { section: { projectDir: "Client" }, warnings };
+    },
     status: async () => {
       const backend = await backendStatus();
       if (backend.available) {

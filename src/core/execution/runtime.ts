@@ -38,7 +38,8 @@ import type {
   SideEffectRecord,
   StructuredError,
 } from "./types";
-import { loadProjectConfig, PROJECT_CLI_CONFIG_RELATIVE } from "../project/config";
+import { loadProjectConfig, PROJECT_CLI_CONFIG_RELATIVE, toProviderSet, type ResolvedProviderBinding } from "../project/config";
+import { buildExecutionHandle, validateHandleSeed, type ExecutionHandle } from "./handle";
 import { generateOperationId, OperationExistsError, OperationStore, validateOperationId } from "../project/operation-store";
 import { redactSecrets } from "../project/redact";
 import { PathSafetyError, resolveProjectRoot, type ProjectRoot } from "../project/paths";
@@ -153,7 +154,7 @@ export function executionFromProcess(
 }
 
 const EXECUTION_STATUSES = ["succeeded", "failed", "cancelled", "unknown"];
-const LIFECYCLES = ["completed", "accepted", "running", "unknown"];
+const LIFECYCLES = ["completed", "accepted", "running", "failed", "cancelled", "unknown"];
 const ACCEPTANCE_STATUSES = ["passed", "failed", "not-run"];
 
 /**
@@ -231,12 +232,13 @@ interface BuildInput {
   operationId: string;
   project: ProjectRoot;
   configFile: string;
-  bindingDirs: Record<string, string>;
+  bindingDirs: Record<string, Record<string, string>>;
   taskId: string | null;
   runId: string | null;
   startedAt: Date;
   command: { file: string; args: string[] } | null;
   execution: CapabilityRunResult["execution"];
+  handle: ExecutionHandle | null;
   acceptance: CapabilityRunResult["acceptance"];
   preconditions: PreconditionOutcome[];
   resources: CapabilityRunResult["resources"];
@@ -280,6 +282,7 @@ function buildResult(input: BuildInput): CapabilityRunResult {
       durationMs: input.finishedAt.getTime() - input.startedAt.getTime(),
     },
     execution: input.execution,
+    handle: input.handle,
     acceptance: input.acceptance,
     preconditions: input.preconditions,
     resources: input.resources,
@@ -329,7 +332,7 @@ export async function runCapability(
     throw err;
   }
 
-  const loadedConfig = loadProjectConfig(project);
+  const loadedConfig = loadProjectConfig(project, toProviderSet(registry.listProviders()));
   if (!loadedConfig.ok) {
     const code =
       loadedConfig.kind === "missing"
@@ -379,8 +382,14 @@ export async function runCapability(
     input: redacted.value,
     redactedPaths: redacted.redactedPaths,
   });
+  const providerBinding: ResolvedProviderBinding | undefined = loadedConfig.resolved[entry.provider.id];
+  const providerBindingDirs = providerBinding ? { ...providerBinding.dirs, ...providerBinding.files } : {};
+  const allBindingDirs: Record<string, Record<string, string>> = Object.fromEntries(
+    Object.entries(loadedConfig.resolved).map(([id, resolved]) => [id, { ...resolved.dirs, ...resolved.files }]),
+  );
   store.event("config-loaded", `已加载工程配置 ${PROJECT_CLI_CONFIG_RELATIVE}`, {
-    bindingDirs: loadedConfig.bindingDirs,
+    bindingDirs: allBindingDirs,
+    unboundProviders: loadedConfig.unbound,
   });
 
   const signal = request.signal ?? new AbortController().signal;
@@ -391,9 +400,11 @@ export async function runCapability(
   const context = {
     operationId,
     projectRoot: project.realRoot,
+    projectAnchor: project,
     configFile: loadedConfig.file,
     config: loadedConfig.config,
-    bindingDirs: loadedConfig.bindingDirs,
+    binding: providerBinding ? providerBinding.section : null,
+    bindingDirs: providerBindingDirs,
     taskId: request.taskId ?? null,
     runId: request.runId ?? null,
     signal,
@@ -402,9 +413,12 @@ export async function runCapability(
     now: clock,
   };
 
+  let executionHandle: ExecutionHandle | null = null;
+
   const finish = (
-    partial: Omit<BuildInput, "entry" | "operationId" | "project" | "configFile" | "bindingDirs" | "taskId" | "runId" | "startedAt" | "persisted" | "finishedAt"> & {
+    partial: Omit<BuildInput, "entry" | "operationId" | "project" | "configFile" | "bindingDirs" | "taskId" | "runId" | "startedAt" | "persisted" | "finishedAt" | "handle"> & {
       persisted?: CapabilityRunResult["persisted"];
+      handle?: ExecutionHandle | null;
     },
   ): CapabilityRunResult => {
     const result = buildResult({
@@ -412,7 +426,8 @@ export async function runCapability(
       operationId,
       project,
       configFile: loadedConfig.file,
-      bindingDirs: loadedConfig.bindingDirs,
+      bindingDirs: allBindingDirs,
+      handle: partial.handle !== undefined ? partial.handle : executionHandle,
       taskId: request.taskId ?? null,
       runId: request.runId ?? null,
       startedAt,
@@ -710,6 +725,15 @@ export async function runCapability(
     store.event("side-effect-undeclared", message);
   }
 
+  // 句柄种子形状校验（在 executionFinal 之前并入契约违约链：坏契约数据不得流入公开结果）
+  const handleSeed = safeOutcome.handle;
+  const seedErrors = handleSeed === undefined ? [] : validateHandleSeed(handleSeed);
+  if (seedErrors.length > 0) {
+    const seedError = structuredError("handle-seed-invalid", "internal", `实现提供的句柄种子非法: ${seedErrors.join("；")}`);
+    contractError ??= seedError;
+    store.event("handle-seed-invalid", seedError.message);
+  }
+
   const executionFinal = contractError
     ? {
         status: "unknown" as ExecutionStatus,
@@ -720,6 +744,29 @@ export async function runCapability(
         error: contractError,
       }
     : execution;
+
+  // 异步触发句柄：Provider 种子形状合法且本次调用成功时由内核补全（身份字段以内核为准）
+  if (
+    seedErrors.length === 0 &&
+    handleSeed !== undefined &&
+    executionFinal.status === "succeeded"
+  ) {
+    executionHandle = buildExecutionHandle({
+      seed: handleSeed,
+      providerId: entry.provider.id,
+      capabilityId: entry.descriptor.id,
+      operationId,
+      project,
+      configFile: loadedConfig.file,
+      startedAt: startedAt.toISOString(),
+      persisted: persist,
+    });
+    store.event("handle-issued", "异步执行句柄已产出", {
+      originOperationId: operationId,
+      backendTaskId: executionHandle.backendTaskId,
+      recoverable: executionHandle.recoverable,
+    });
+  }
 
   const outcomeAcceptance = safeOutcome.acceptance as
     | { status?: AcceptanceStatus; reason?: string; pending?: boolean; evidence?: Evidence[] }
@@ -734,10 +781,20 @@ export async function runCapability(
     evidence: mergeEvidence(outcomeAcceptance?.evidence, safeOutcome.evidence),
   };
   if (!shapeError && outcomeAcceptance?.pending === true) acceptance.pending = true;
-  if (!shapeError && outcomeAcceptance?.status === "passed" && (executionFinal.status !== "succeeded" || executionFinal.lifecycle !== "completed" || acceptance.pending || signal.aborted)) {
-    // 防御：执行未成功不得给出 passed（实现违约时由内核纠正）
+  if (
+    !shapeError &&
+    outcomeAcceptance?.status === "passed" &&
+    (executionFinal.status !== "succeeded" ||
+      executionFinal.lifecycle === "accepted" ||
+      executionFinal.lifecycle === "unknown" ||
+      acceptance.pending ||
+      signal.aborted)
+  ) {
+    // 防御红线：调用未成功、任务仅被接受（启动≠通过）或状态不可解释时，不得给出 passed。
+    // 任务级 running/failed/cancelled 允许 passed——状态/查询/取消类能力的验收目标是
+    // 观察或关联成立，不是任务业务通过（如 cancel 的 passed=取消已确认生效）。
     acceptance.status = "not-run";
-    acceptance.reason = `执行状态 ${executionFinal.status}，实现给出的 passed 被内核降级为 not-run`;
+    acceptance.reason = `执行状态 ${executionFinal.status}/${executionFinal.lifecycle}，实现给出的 passed 被内核降级为 not-run`;
     acceptance.pending = false;
     store.event("acceptance-downgraded", acceptance.reason);
   }

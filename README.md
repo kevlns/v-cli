@@ -181,11 +181,11 @@ v-cli --json ts 1710000000 | jq .seconds   # 前置全局 --json 同样生效
 | `v-cli agent describe <name> [--json]` | 单个命令的完整记录；未找到时 stderr 报错并退出 1 |
 | `v-cli agent docs [--json]` | 输出当前包内置 AGENTS.md 原文；`--json` 输出 `{ package, version, sha256, content }`；缺失时退出 1 |
 | `v-cli agent init [directory] [--force] [--dry-run] [--json]` | 把内置 AGENTS.md 写入目录（默认 cwd）；已存在默认拒绝退出 1，`--force` 原子覆盖，`--dry-run` 只报告 |
-| `v-cli project init [--project <dir>] [--unity-project <dir>] [--editor-version <v>] [--test-mode <mode>] [--json]` | 写入 `.vant/config/v-cli.json`（仅 CLI 能力绑定）；已存在拒绝退出 1；不触碰 Vant 配置 |
+| `v-cli project init [--project <dir>] [--binding <providerId>=<JSON>]… [--json]` | 写入 `.vant/config/v-cli.json`（通用外壳：为有默认绑定的 Provider 生成段，`--binding` 完整覆盖）；已存在拒绝退出 1；不触碰 Vant 配置 |
 | `v-cli project inspect [--project <dir>] [--json]` | 只读检查配置/绑定目录/`.vant` 布局/provider 发现状态（不执行工具） |
 | `v-cli capability list [--provider <id>] [--json]` | 列出已注册 capability 与 provider 发现状态（只读） |
-| `v-cli capability describe <id> [--json]` | 单 capability 完整契约（schema/前置条件/副作用/资源/重试）；未注册退出 1 |
-| `v-cli capability run <id> [--project <dir>] [--input <json>] [--set k=v]… [--operation-id <id>] [--no-persist] [--json]` | 结构化执行；退出码 0/1/2/3/4/5 与结果对齐 |
+| `v-cli capability describe <id> [--json]` | 单 capability 完整契约（schema/前置条件/副作用/资源/重试/provider 绑定契约）；未注册退出 1 |
+| `v-cli capability run <id> [--project <dir>] [--input <json>] [--set k=v]… [--operation-id <id>] [--no-persist] [--json]` | 结构化执行；退出码 0/1/2/3/4/5 与结果对齐；异步触发在结果 `handle` 中返回可序列化执行句柄（lifecycle 为任务级六态：accepted/running/completed/failed/cancelled/unknown） |
 
 ### SDK 出口（后续 MCP/Agent/组织层复用）
 

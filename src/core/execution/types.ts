@@ -11,6 +11,8 @@
  */
 
 import type { ProjectCliConfig } from "../project/config";
+import type { ProjectRoot } from "../project/paths";
+import type { ExecutionHandle, ExecutionHandleSeed } from "./handle";
 
 /** JSON Schema 子集（本阶段支持的形态，注册时校验） */
 export type JsonSchemaType =
@@ -186,8 +188,12 @@ export interface ProviderStatus {
 /** 执行状态：只描述本次调用本身 */
 export type ExecutionStatus = "succeeded" | "failed" | "cancelled" | "unknown";
 
-/** 生命周期：描述底层引擎工作是否结束（异步启动用 accepted/running） */
-export type ExecutionLifecycle = "completed" | "accepted" | "running" | "unknown";
+/**
+ * 生命周期：描述底层引擎工作（任务级六态，阶段 C 扩展）：
+ * accepted=已接受启动、running=进行中、completed=正常终态、failed=失败终态、
+ * cancelled=后端确认取消、unknown=不可解释/不可知。
+ */
+export type ExecutionLifecycle = "completed" | "accepted" | "running" | "failed" | "cancelled" | "unknown";
 
 /** 验收状态：只描述业务结论 */
 export type AcceptanceStatus = "passed" | "failed" | "not-run";
@@ -240,8 +246,8 @@ export interface ProjectBindingInfo {
   root: string;
   /** .vant/config/v-cli.json 绝对路径 */
   configFile: string;
-  /** capability 关注的绑定目录（binding 名 -> 已安全解析的绝对路径） */
-  bindingDirs: Record<string, string>;
+  /** 已安全解析的绑定路径（provider id -> 字段名 -> 绝对路径） */
+  bindingDirs: Record<string, Record<string, string>>;
 }
 
 export interface CapabilityRunResult<Out = unknown> {
@@ -267,6 +273,8 @@ export interface CapabilityRunResult<Out = unknown> {
     attempts: number;
     error: StructuredError | null;
   };
+  /** 异步触发句柄（触发类能力且调用成功时产出；其余为 null） */
+  handle: ExecutionHandle | null;
   acceptance: {
     status: AcceptanceStatus;
     reason: string;
@@ -324,21 +332,18 @@ export interface OperationLogger {
   warn(message: string): void;
 }
 
-export interface ResolvedBinding {
-  /** binding 名（如 unity） */
-  name: string;
-  /** 已解析并做越界检查的绝对路径 */
-  dir: string;
-}
-
 /** provider 实现可用的执行上下文 */
 export interface CapabilityExecutionContext {
   operationId: string;
   projectRoot: string;
+  /** 锚定后的工程根（realpath 语义；句柄校验等需要 ProjectRoot 的内核入口直接用它） */
+  projectAnchor: ProjectRoot;
   configFile: string;
   /** 已校验的工程级 v-cli 配置（.vant/config/v-cli.json） */
   config: ProjectCliConfig;
-  /** 配置绑定的工程目录（binding 名 -> 绝对路径） */
+  /** 本 provider 的已校验绑定段（无绑定为 null；消费而非重新解析 ctx.config） */
+  binding: Record<string, unknown> | null;
+  /** 本 provider 的绑定路径（pathField 字段名 -> 绝对路径） */
   bindingDirs: Record<string, string>;
   taskId: string | null;
   runId: string | null;
@@ -376,6 +381,8 @@ export interface ImplementationOutcome<Out = unknown> {
   command?: { file: string; args: string[] } | null;
   /** 工具版本等归属信息 */
   tool?: { name: string; version?: string; path?: string } | null;
+  /** 异步触发句柄种子（backendTaskId 等）；内核补全身份与完整性后进入结果 */
+  handle?: ExecutionHandleSeed;
 }
 
 export type PreconditionChecker = (
@@ -397,7 +404,7 @@ export interface CapabilityRegistration {
   implementation: CapabilityImplementation;
 }
 
-/** Provider：状态发现（不执行工具）+ 能力注册 */
+/** Provider：状态发现（不执行工具）+ 能力注册 + 自包含绑定契约 */
 export interface CapabilityProvider {
   id: string;
   version: string;
@@ -405,7 +412,62 @@ export interface CapabilityProvider {
   /** 只做发现（读包/读配置），不得执行被包装工具 */
   status(): Promise<ProviderStatus> | ProviderStatus;
   capabilities(): CapabilityRegistration[];
+  /** bindings.<providerId> 段的契约：schema + 路径字段声明 + 语义校验与解析 */
+  binding: ProviderBindingContract;
+  /** 可选：project init 生成默认绑定段（未实现则 init 不为该 provider 生成段） */
+  defaultBinding?: ProviderDefaultBinding;
 }
+
+/* ------------------------- Provider 绑定契约 ------------------------- */
+
+/** 绑定段中的路径字段声明：核心据此统一做越界/符号链接强核对 */
+export interface ProviderPathField {
+  /** 绑定段内字段名（须出现在 binding.schema.properties） */
+  field: string;
+  kind: "dir" | "file";
+  required: boolean;
+}
+
+export interface ProviderBindingResolutionOk {
+  ok: true;
+  /** 字段名 -> 已安全解析的绝对路径（kind:"dir" 的 pathFields） */
+  dirs: Record<string, string>;
+  /** 字段名 -> 已安全解析的绝对路径（kind:"file" 的 pathFields） */
+  files: Record<string, string>;
+  /** Provider 语义归一后的绑定段（运行期注入 ctx.binding；缺省用原始段） */
+  section?: Record<string, unknown>;
+  warnings: string[];
+}
+
+export interface ProviderBindingResolutionError {
+  ok: false;
+  errors: string[];
+}
+
+export type ProviderBindingResolution = ProviderBindingResolutionOk | ProviderBindingResolutionError;
+
+export interface ProviderBindingResolveInput {
+  project: ProjectRoot;
+  /** bindings.<providerId> 原始对象 */
+  raw: unknown;
+  /** 路径解析统一入口（核心注入；"." 表示工程根本身） */
+  resolveInsideProject: typeof import("../project/paths").resolveInsideProject;
+}
+
+export interface ProviderBindingContract {
+  /** bindings.<providerId> 段的 JSON Schema（顶层必须是 object） */
+  schema: JsonSchema;
+  /** 声明的路径字段（核心对 resolve 结果做重解析强核对；注册表保存冻结快照） */
+  pathFields: readonly ProviderPathField[];
+  /** 语义校验与解析：字段类型/值域由 Provider 自定，路径必须走注入的 resolveInsideProject */
+  resolve(input: ProviderBindingResolveInput): ProviderBindingResolution;
+}
+
+/** project init 默认绑定段生成器（可选能力） */
+export type ProviderDefaultBinding = (project: ProjectRoot) => {
+  section: Record<string, unknown>;
+  warnings: string[];
+};
 
 export interface CapabilitySummary {
   id: string;

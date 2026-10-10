@@ -7,7 +7,15 @@ import type {
   CapabilityImplementation,
   CapabilityProvider,
   JsonSchema,
+  ProviderBindingContract,
 } from "../src/core/execution/types";
+
+/** 最小合法绑定契约（注册期校验基准） */
+const MINIMAL_BINDING: ProviderBindingContract = {
+  schema: { type: "object", additionalProperties: false, properties: {} },
+  pathFields: [],
+  resolve: () => ({ ok: true, dirs: {}, files: {}, warnings: [] }),
+};
 
 const INPUT_SCHEMA: JsonSchema = {
   type: "object",
@@ -66,6 +74,7 @@ function provider(
     description: "示例 provider",
     status: () => ({ state: "available", detail: "ok" }),
     capabilities: () => capabilities,
+    binding: MINIMAL_BINDING,
     ...overrides,
   };
 }
@@ -129,6 +138,35 @@ describe("Capability 注册校验", () => {
     expect(errors.join()).toContain("provider.description");
     expect(errors.join()).toContain("provider.status 必须是函数");
     expect(errors.join()).toContain("provider.capabilities 必须是函数");
+  });
+
+  it("绑定契约缺失或非法被拒绝（schema 非 object / pathFields 未声明 / resolve 非函数 / defaultBinding 非函数）", () => {
+    expect(
+      validateProvider(provider([], { binding: undefined as unknown as ProviderBindingContract })),
+    ).toContainEqual(expect.stringContaining("provider.binding 必须是对象"));
+
+    const badSchema = { ...MINIMAL_BINDING, schema: { type: "string" } as JsonSchema };
+    expect(validateProvider(provider([], { binding: badSchema }))).toContainEqual(
+      expect.stringContaining("provider.binding.schema.type 必须是 object"),
+    );
+
+    const undeclaredField: ProviderBindingContract = {
+      schema: { type: "object", additionalProperties: false, properties: {} },
+      pathFields: [{ field: "workspaceDir", kind: "dir", required: true }],
+      resolve: () => ({ ok: true, dirs: {}, files: {}, warnings: [] }),
+    };
+    expect(validateProvider(provider([], { binding: undeclaredField }))).toContainEqual(
+      expect.stringContaining('未在 provider.binding.schema.properties 中声明'),
+    );
+
+    const noResolve = { schema: MINIMAL_BINDING.schema, pathFields: [] };
+    expect(validateProvider(provider([], { binding: noResolve as unknown as ProviderBindingContract }))).toContainEqual(
+      expect.stringContaining("provider.binding.resolve 必须是函数"),
+    );
+
+    expect(
+      validateProvider(provider([], { defaultBinding: "nope" as unknown as CapabilityProvider["defaultBinding"] })),
+    ).toContainEqual(expect.stringContaining("provider.defaultBinding 出现时必须是函数"));
   });
 
   it("capability id 必须带 provider 命名空间前缀", () => {

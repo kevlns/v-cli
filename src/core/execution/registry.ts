@@ -32,6 +32,8 @@ import type {
 const ID_RE = /^[a-z][a-z0-9-]*$/;
 const CAPABILITY_ID_RE = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const BINDING_FIELD_RE = /^[A-Za-z][A-Za-z0-9]*$/;
+const DANGEROUS_FIELD_NAMES = new Set(["__proto__", "prototype", "constructor"]);
 
 const SIDE_EFFECT_KINDS = ["process-exec", "fs-write", "fs-read", "engine-state", "network"] as const;
 const RESOURCE_KINDS = ["project-workspace", "engine-editor", "build-target", "user-cache", "network"] as const;
@@ -45,6 +47,62 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.length > 0;
+}
+
+/** 校验绑定契约：schema 合法且顶层 object、pathFields 声明完整（白名单键）且与 schema 一致、resolve 是函数 */
+function validateBindingContract(binding: unknown, at: string): string[] {
+  const errors: string[] = [];
+  if (!isPlainObject(binding)) return [`${at} 必须是对象（Provider 绑定契约）`];
+  const schemaErrors = validateSchemaDefinition(binding.schema, `${at}.schema`);
+  errors.push(...schemaErrors);
+  if (schemaErrors.length === 0 && (binding.schema as { type?: unknown }).type !== "object") {
+    errors.push(`${at}.schema.type 必须是 object（绑定段固定为结构化对象）`);
+  }
+  const schemaProps =
+    isPlainObject(binding.schema) && isPlainObject(binding.schema.properties) ? binding.schema.properties : null;
+  const declared = schemaProps ? new Set(Object.keys(schemaProps)) : null;
+
+  const PATH_FIELD_KEYS = ["field", "kind", "required"];
+  const fields = binding.pathFields;
+  if (!Array.isArray(fields)) {
+    errors.push(`${at}.pathFields 必须是数组（无路径字段也要显式声明空数组）`);
+  } else {
+    const seen = new Set<string>();
+    fields.forEach((entry, i) => {
+      const where = `${at}.pathFields[${i}]`;
+      if (!isPlainObject(entry)) {
+        errors.push(`${where} 必须是对象`);
+        return;
+      }
+      for (const key of Object.keys(entry)) {
+        if (!PATH_FIELD_KEYS.includes(key)) {
+          errors.push(`${where} 含未知键 "${key}"（只允许 ${PATH_FIELD_KEYS.join(" / ")}）`);
+        }
+      }
+      if (!isNonEmptyString(entry.field) || !BINDING_FIELD_RE.test(entry.field)) {
+        errors.push(`${where}.field 必须是合法字段名（字母开头的字母数字串）`);
+      } else if (DANGEROUS_FIELD_NAMES.has(entry.field)) {
+        errors.push(`${where}.field "${entry.field}" 是危险键名，拒绝`);
+      } else if (seen.has(entry.field)) {
+        errors.push(`${where}.field "${entry.field}" 重复`);
+      } else {
+        seen.add(entry.field);
+        if (declared && !declared.has(entry.field)) {
+          errors.push(`${where}.field "${entry.field}" 未在 ${at}.schema.properties 中声明`);
+        }
+      }
+      if (entry.kind !== "dir" && entry.kind !== "file") {
+        errors.push(`${where}.kind 必须是 "dir" 或 "file"`);
+      }
+      if (typeof entry.required !== "boolean") {
+        errors.push(`${where}.required 必须是布尔值`);
+      }
+    });
+  }
+  if (typeof binding.resolve !== "function") {
+    errors.push(`${at}.resolve 必须是函数`);
+  }
+  return errors;
 }
 
 /** 校验 provider 元数据（注册 provider 时） */
@@ -65,6 +123,10 @@ export function validateProvider(provider: unknown): string[] {
   }
   if (typeof provider.capabilities !== "function") {
     errors.push("provider.capabilities 必须是函数");
+  }
+  errors.push(...validateBindingContract(provider.binding, "provider.binding"));
+  if (provider.defaultBinding !== undefined && typeof provider.defaultBinding !== "function") {
+    errors.push("provider.defaultBinding 出现时必须是函数");
   }
   return errors;
 }
@@ -272,7 +334,14 @@ export class CapabilityRegistry {
       version: provider.version,
       description: provider.description,
     };
-    this.providersById.set(provider.id, { ...provider });
+    // 绑定契约做受保护快照：schema/pathFields 深拷贝并冻结（resolve 函数保留引用），
+    // 注册方此后改写原对象不得影响注册表的校验规则（计划 §5：元数据不可被外部修改污染）
+    const protectedBinding: CapabilityProvider["binding"] = Object.freeze({
+      schema: structuredClone(provider.binding.schema),
+      pathFields: Object.freeze(provider.binding.pathFields.map((f) => Object.freeze({ ...f }))),
+      resolve: provider.binding.resolve,
+    });
+    this.providersById.set(provider.id, Object.freeze({ ...provider, binding: protectedBinding }));
     for (const item of pending) {
       this.entries.set(item.descriptor.id, {
         descriptor: structuredClone(item.descriptor),
@@ -301,16 +370,33 @@ export class CapabilityRegistry {
     }));
   }
 
+  /** 已注册 provider 对象（配置绑定校验用；顺序为注册顺序） */
+  listProviders(): CapabilityProvider[] {
+    return [...this.providersById.values()];
+  }
+
+  getProvider(id: string): CapabilityProvider | undefined {
+    return this.providersById.get(id);
+  }
+
   list(): CapabilitySummary[] {
     return [...this.entries.values()]
       .map((entry) => this.summarize(entry))
       .sort((a, b) => a.id.localeCompare(b.id));
   }
 
-  describe(id: string): (CapabilityDescriptor & { provider: ProviderInfo }) | undefined {
+  describe(id: string): (CapabilityDescriptor & { provider: ProviderInfo & { binding: { schema: JsonSchema; pathFields: CapabilityProvider["binding"]["pathFields"] } } }) | undefined {
     const entry = this.entries.get(id);
     if (!entry) return undefined;
-    return structuredClone({ ...entry.descriptor, provider: entry.provider });
+    const provider = this.providersById.get(entry.provider.id);
+    if (!provider) return undefined;
+    return structuredClone({
+      ...entry.descriptor,
+      provider: {
+        ...entry.provider,
+        binding: { schema: provider.binding.schema, pathFields: provider.binding.pathFields },
+      },
+    });
   }
 
   get(id: string): Entry | undefined {

@@ -180,7 +180,8 @@ function renderCore(plugins, version) {
   lines.push("  `v-cli capability list|describe|run` 列出/查看/执行结构化 capability（稳定 id、输入输出 schema、前置条件、声明的副作用、资源需求、重试语义）");
   lines.push("- capability run 的语义：工程根用 `--project` 显式锚定；输入由配置绑定（不接受 projectPath 等覆盖）；");
   lines.push("  **执行状态与验收状态分离**——进程退出码 0 不等于业务通过，退出码 0 只在验收 passed 时出现（1=执行/验收失败，2=未执行，3=已执行但验收 not-run 需按 followUp 轮询，4=已确认取消，5=结果未知）；");
-  lines.push("  每次执行在 `<工程根>/.vant/state/operations/<operationId>/` 保存输入摘要、事件与结果证据（本地记录，不是任务队列；`--no-persist` 可关闭）");
+  lines.push("  每次执行在 `<工程根>/.vant/state/operations/<operationId>/` 保存输入摘要、事件与结果证据（本地记录，不是任务队列；`--no-persist` 可关闭）；");
+  lines.push("  **lifecycle 是任务级六态**（accepted/running/completed/failed/cancelled/unknown；unknown=不可解释/不可知，绝不升级）；异步触发在结果 `handle` 中返回可序列化执行句柄——查询/取消类能力以 `input.handle` 传入并用内核校验（落盘证据回读，失败明确拒绝不回退最近任务）；Unity 后端暂无任务身份（句柄 backendTaskId=null，状态能力为观察语义）");
   lines.push("- 首个 provider 是 unity（基于已安装 `@kevlns/u-cli-mod`，受控 argv 调用）：先 `v-cli capability describe <id> --json` 读契约；");
   lines.push("  exec 类能力默认自动跑一次 doctor 核对就绪判据（不得跳过）；`unity.compile`/`unity.test-start` 是异步触发，只报告 accepted，必须轮询 `unity.compile-status`/`unity.test-status`；测试 completed、有效非零报告且全部用例通过才 passed");
   lines.push("- **首调规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，");

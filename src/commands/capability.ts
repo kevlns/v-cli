@@ -4,7 +4,7 @@ import type { Command } from "commander";
 import type { CliCommand } from "../core/command";
 import type { CliContext } from "../core/context";
 import { CapabilityError } from "../core/execution/errors";
-import { createDefaultRegistry } from "../core/execution/default-registry";
+import { createDefaultRegistry } from "../default-registry";
 import { exitCodeForResult, runCapability } from "../core/execution/runtime";
 import type { CapabilityRunResult, CapabilitySummary } from "../core/execution/types";
 import { PathSafetyError } from "../core/project/paths";
@@ -73,6 +73,21 @@ function describeLines(row: CapabilitySummary, full: Record<string, unknown>): s
   );
   const retry = full.retry as { safe: boolean; maxAttempts: number; strategy: string; description: string };
   lines.push(`重试语义: safe=${retry.safe}, maxAttempts=${retry.maxAttempts}, strategy=${retry.strategy} — ${retry.description}`);
+  const providerBinding = (
+    full.provider as {
+      binding?: { schema: unknown; pathFields: { field: string; kind: string; required: boolean }[] };
+    }
+  ).binding;
+  if (providerBinding) {
+    lines.push(`绑定 schema（bindings.${(full.provider as { id?: string }).id}）: ${JSON.stringify(providerBinding.schema)}`);
+    lines.push(
+      providerBinding.pathFields.length > 0
+        ? `绑定路径字段: ${providerBinding.pathFields
+            .map((f) => `${f.field}（${f.kind}${f.required ? "，必填" : "，可选"}）`)
+            .join("、")}`
+        : "绑定路径字段: 无",
+    );
+  }
   if (typeof full.timeoutMs === "number") lines.push(`建议超时: ${full.timeoutMs} ms`);
   return lines;
 }
@@ -89,6 +104,11 @@ function resultSummaryLines(result: CapabilityRunResult): string[] {
   ];
   if (result.output !== null && result.output !== undefined) {
     lines.push(`output: ${JSON.stringify(result.output)}`);
+  }
+  if (result.handle !== null) {
+    lines.push(
+      `handle: origin=${result.handle.originOperationId} backendTaskId=${result.handle.backendTaskId ?? "null"} recoverable=${result.handle.recoverable}（查询/取消能力以 input.handle 传入此对象）`,
+    );
   }
   if (result.followUp.length > 0) {
     lines.push(`followUp: ${result.followUp.map((f) => `${f.capabilityId ?? "-"} → ${f.hint}`).join("; ")}`);

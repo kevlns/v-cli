@@ -24,8 +24,8 @@ Vant 组织层负责任务调度/持久化任务/资源租约；v-cli 只做注�
 
 ### 命令
 
-- `v-cli project init [--project <目录>] [--unity-project <目录>] [--editor-version <版本>] [--test-mode <EditMode|PlayMode>] [--json]`
-  — 写入 `.vant/config/v-cli.json`（只放 CLI 能力/适配器绑定）。**已存在一律拒绝**；不修改、不读 Vant 的 `.vant/config/project.json`（角色/workflow 归 Vant）。
+- `v-cli project init [--project <目录>] [--binding <providerId>=<JSON>]… [--json]`
+  — 写入 `.vant/config/v-cli.json`（通用外壳：schemaVersion + 按 Provider 分组的 bindings；只放 CLI 能力/适配器绑定）。为有默认绑定的 Provider 生成默认段，`--binding` 可完整覆盖某段（例：`--binding unity='{"projectDir":"Client","editorVersion":"2022.3.59f1c1"}'`）。**已存在一律拒绝**；不修改、不读 Vant 的 `.vant/config/project.json`（角色/workflow 归 Vant）。各 Provider 绑定段的字段契约用 `v-cli capability describe <id> --json` 查看（provider.binding）。
 - `v-cli project inspect [--project <目录>] [--json]` — 只读检查配置、绑定目录、`.vant` 布局与 provider 发现状态。
 - `v-cli capability list [--provider <id>] [--json]` — 列出 capability（只读，不执行工具）。
 - `v-cli capability describe <id> [--json]` — 单能力完整契约；执行前先读它，不猜参数。

@@ -99,13 +99,16 @@ function deepestExisting(target: string, stopAt: string): string {
 
 /**
  * 把相对路径解析到工程根内；任何越界（绝对路径/../符号链接逃逸）都拒绝。
- * 返回绝对路径与（若存在）realpath。
+ * 返回绝对路径与（若存在）realpath。绑定路径允许 "." 表示工程根本身。
  */
 export function resolveInsideProject(
   project: ProjectRoot,
   relative: string,
   label: string,
 ): { path: string; realPath: string | null } {
+  if (relative === ".") {
+    return { path: project.root, realPath: project.realRoot };
+  }
   const segments = splitSafeRelative(relative, label);
   const target = path.join(project.root, ...segments);
 
@@ -138,6 +141,12 @@ export function resolveInsideProject(
     }
   }
   return { path: target, realPath };
+}
+
+/** 路径词形比较基准：反斜杠→斜杠、去尾斜杠；仅 win32 小写（大小写不敏感文件系统） */
+export function comparePathForm(p: string): string {
+  const forward = p.replace(/\\/g, "/").replace(/\/+$/, "");
+  return process.platform === "win32" ? forward.toLowerCase() : forward;
 }
 
 /** 相对工程根的展示路径（posix 分隔符） */

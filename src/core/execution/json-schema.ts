@@ -199,6 +199,12 @@ export function validateValue(value: unknown, schema: JsonSchema, pointer = "$")
   if (schema.type === "boolean" && schema.enum && !schema.enum.includes(value as boolean)) errors.push(`${pointer} 不在 enum 内`);
 
   if (schema.type === "object" && isPlainObject(value)) {
+    // 原型污染纵深防御：危险键无论 additionalProperties 与 properties 如何声明都拒绝
+    for (const key of Object.keys(value)) {
+      if (key === "__proto__" || key === "prototype" || key === "constructor") {
+        errors.push(`${pointer} 含危险键 "${key}"，拒绝`);
+      }
+    }
     const required = schema.required ?? [];
     for (const key of required) {
       if (!Object.hasOwn(value, key)) errors.push(`${pointer} 缺少必需属性 "${key}"`);

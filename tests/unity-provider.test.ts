@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CapabilityRegistry } from "../src/core/execution/registry";
@@ -347,7 +348,7 @@ describe("unity provider：compile / compile-status", () => {
     const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: "", stderr: HANDOFF_STDERR })));
     const result = await run(registry, p, "unity.compile");
     expect(result.execution.status).toBe("unknown");
-    expect(result.execution.lifecycle).toBe("accepted");
+    expect(result.execution.lifecycle).toBe("unknown");
     expect((result.output as { accepted: boolean }).accepted).toBe(false);
     expect(result.acceptance.pending).toBe(true);
     expect(exitCodeForResult(result)).toBe(5);
@@ -703,5 +704,131 @@ describe("P.Cell 真实协议与验收回归", () => {
   it("外层失败不能被内层成功覆盖", async () => {
     const p = project(); const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: JSON.stringify({ success: false, data: { success: true, result: { status: "ready" } } }) })));
     expect((await run(registry, p, "unity.editor-status")).execution.status).toBe("failed");
+  });
+});
+
+describe("阶段 C：六态 lifecycle 迁移与目标工程回显核对", () => {
+  /** 信封回显目标工程必须与绑定一致（GAP-U2 核对），否则响应不被采信 */
+  const statusEnvelope = (projectDir: string, resultJson: string) =>
+    `${JSON.stringify({ success: true, data: { success: true, result: resultJson, target: { host: "127.0.0.1", port: 7800, projectPath: projectDir } } })}\n`;
+
+  it("test_status=running → 任务级 lifecycle=running（不再与终态同值）", async () => {
+    const p = project();
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: statusEnvelope(p.clientDir, JSON.stringify({ status: "running" })) })));
+    const result = await run(registry, p, "unity.test-status");
+    expect(result.execution).toMatchObject({ status: "succeeded", lifecycle: "running" });
+    expect(result.acceptance).toMatchObject({ status: "not-run", pending: true });
+  });
+
+  it("test_status=cancelled → 任务级 lifecycle=cancelled（后端确认取消一等表达）", async () => {
+    const p = project();
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: statusEnvelope(p.clientDir, JSON.stringify({ status: "cancelled" })) })));
+    const result = await run(registry, p, "unity.test-status");
+    expect(result.execution).toMatchObject({ status: "succeeded", lifecycle: "cancelled" });
+    expect(result.acceptance.status).toBe("failed");
+  });
+
+  it("recompile_status=compiling → lifecycle=running；idle → unknown；failed → failed", async () => {
+    const p = project();
+    for (const [statusText, lifecycle] of [["compiling", "running"], ["idle", "unknown"], ["failed", "failed"]] as const) {
+      const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: statusEnvelope(p.clientDir, JSON.stringify({ status: statusText })) })));
+      const result = await run(registry, p, "unity.compile-status");
+      expect(result.execution.lifecycle, statusText).toBe(lifecycle);
+      expect(result.execution.status, statusText).toBe("succeeded");
+    }
+  });
+
+  it("信封 OK 但 result 载荷不可二次解析 → 调用 succeeded / 任务 unknown / not-run(pending)（与值域外分开）", async () => {
+    const p = project();
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: statusEnvelope(p.clientDir, "not-json{") })));
+    const result = await run(registry, p, "unity.test-status");
+    expect(result.execution).toMatchObject({ status: "succeeded", lifecycle: "unknown" });
+    expect(result.acceptance).toMatchObject({ status: "not-run", pending: true });
+    expect(result.followUp[0]?.capabilityId).toBe("unity.test-status");
+  });
+
+  it("GAP-U2：信封回显目标工程与绑定不一致 → unity-target-mismatch，响应不采信", async () => {
+    const p = project();
+    const wrongTarget = statusEnvelope("C:/other/project", JSON.stringify({ status: "ready" }));
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: wrongTarget })));
+    const result = await run(registry, p, "unity.editor-status");
+    expect(result.execution.status).toBe("failed");
+    expect(result.execution.error?.code).toBe("unity-target-mismatch");
+    expect(result.acceptance.status).toBe("not-run");
+  });
+
+  it("异步触发（compile/test-start）产出句柄：backendTaskId 显式 null（后端无身份协议，GAP-U1）", async () => {
+    const p = project();
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: statusEnvelope(p.clientDir, JSON.stringify({ status: "triggered" })) })));
+    const compile = await run(registry, p, "unity.compile");
+    expect(compile.handle).not.toBeNull();
+    expect(compile.handle?.backendTaskId).toBeNull();
+    expect(compile.handle?.capabilityId).toBe("unity.compile");
+    expect(compile.handle?.recoverable).toBe(false); // persist=false 启动
+    expect(compile.execution.lifecycle).toBe("accepted");
+
+    const { registry: r2 } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: statusEnvelope(p.clientDir, JSON.stringify({ result: "running", status: "running" })) })));
+    const test = await run(r2, p, "unity.test-start", { mode: "EditMode" });
+    expect(test.handle?.backendTaskId).toBeNull();
+    expect(test.handle?.capabilityId).toBe("unity.test-start");
+    expect(test.execution.lifecycle).toBe("accepted");
+  });
+});
+
+describe("阶段 C 一审修复回归", () => {
+  const env = (projectDir: string, resultJson: string) =>
+    `${JSON.stringify({ success: true, data: { success: true, result: resultJson, target: { host: "127.0.0.1", port: 7800, projectPath: projectDir } } })}
+`;
+  it("test-cancel 确认取消 → 任务级 lifecycle=cancelled（与 test-status 的 cancelled 语义一致）", async () => {
+    const p = project();
+    const handler = (call: FakeCall): FakeResponse => {
+      if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+      if (pluginArgs(call).includes("cancel_tests")) {
+        return { exitCode: 0, stdout: env(p.clientDir, JSON.stringify({ status: "cancelled", message: "Test run cancelled." })) };
+      }
+      return { exitCode: 0, stdout: env(p.clientDir, JSON.stringify({ status: "cancelled" })) };
+    };
+    const { registry } = registryFor(handler);
+    const result = await run(registry, p, "unity.test-cancel");
+    expect(result.execution.lifecycle).toBe("cancelled");
+    expect(result.acceptance.status).toBe("passed");
+  });
+
+  it("compile-status 终态带编译错误 → lifecycle=failed（成败不再同值）", async () => {
+    const p = project();
+    const withErrors = env(p.clientDir, JSON.stringify({ status: "completed", failed: true, errors: ["CS1002"] }));
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: withErrors })));
+    const result = await run(registry, p, "unity.compile-status");
+    expect(result.execution).toMatchObject({ status: "succeeded", lifecycle: "failed" });
+    expect(result.acceptance.status).toBe("failed");
+  });
+
+  it("触发未确认（handoff/输出不可解析）→ lifecycle=unknown（与\"无法确认已被接受\"一致）", async () => {
+    const p = project();
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: "", stderr: HANDOFF_STDERR })));
+    const result = await run(registry, p, "unity.compile");
+    expect(result.execution).toMatchObject({ status: "unknown", lifecycle: "unknown" });
+    expect(result.execution.error?.code).toBe("trigger-unconfirmed");
+  });
+
+  it("GAP-U2 归一化：大小写/分隔符/尾斜杠/realpath（8.3 短名）不误拒，真实不同工程仍拒绝", async () => {
+    const p = project();
+    const long = fs.realpathSync(p.clientDir);
+    const variants = [
+      long,                                        // realpath 长路径（与绑定短名词形不同）
+      long.split(path.sep).join("/"),              // 正斜杠
+      long.toUpperCase(),                          // 大写（win32 不敏感）
+      `${long.split(path.sep).join("/")}/`,        // 尾斜杠
+    ];
+    for (const [i, echo] of variants.entries()) {
+      const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: env(echo, JSON.stringify({ status: "ready" })) })));
+      const result = await run(registry, p, "unity.editor-status");
+      expect(result.execution.error?.code, `variant ${i}`).toBeUndefined();
+      expect(result.acceptance.status, `variant ${i}`).toBe("passed");
+    }
+    // 真实不同工程仍拒绝
+    const { registry: bad } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: env("C:/other/project", JSON.stringify({ status: "ready" })) })));
+    const failed = await run(bad, p, "unity.editor-status");
+    expect(failed.execution.error?.code).toBe("unity-target-mismatch");
   });
 });
