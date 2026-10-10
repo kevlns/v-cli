@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { Command, CommanderError } from "commander";
 import { createContext, defaultHomeDir } from "./core/context";
 import { loadAllCommands } from "./core/loader";
@@ -79,7 +80,14 @@ async function main(): Promise<number> {
       "  3. v-cli agent describe <name> --json",
       "  4. v-cli agent init .            （可选：写入工作区 AGENTS.md，AI Agent 自动读取）",
       "",
-      "详情见 `v-cli agent --help`；单命令说明书：`v-cli agent docs --help` / `v-cli agent init --help`。",
+      "工程执行基座（结构化能力，验收与退出码分离）：",
+      "  v-cli project init --project .                    （写入 .vant/config/v-cli.json，已存在拒绝覆盖）",
+      "  v-cli capability list --json                      （列能力 + provider 状态，不执行工具）",
+      "  v-cli capability describe unity.doctor --json     （完整契约：schema/前置条件/副作用/资源/重试）",
+      "  v-cli capability run unity.doctor --project . --json",
+      "",
+      "详情见 `v-cli agent --help`、`v-cli capability --help`、`v-cli project --help`；",
+      "单命令说明书：`v-cli agent docs --help` / `v-cli agent init --help`。",
     ].join("\n"),
   );
 

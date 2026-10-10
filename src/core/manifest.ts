@@ -41,7 +41,15 @@ export type ManifestValidation =
   | { ok: false; errors: string[] };
 
 /** 内置命令名 + help：任何插件（官方或本地）都不允许占用 */
-export const RESERVED_MANIFEST_COMMAND_NAMES = ["doctor", "plugin", "ts", "agent", "help"] as const;
+export const RESERVED_MANIFEST_COMMAND_NAMES = [
+  "doctor",
+  "plugin",
+  "ts",
+  "agent",
+  "help",
+  "project",
+  "capability",
+] as const;
 
 export const KNOWN_PLATFORMS = ["darwin", "linux", "win32"] as const;
 

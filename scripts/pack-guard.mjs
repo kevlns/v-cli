@@ -18,6 +18,8 @@ const EXPECTED_NAME = "@kevlns/v-cli";
 const EXPECTED_VERSION = "0.2.18";
 const REQUIRED_FILES = [
   "dist/cli.mjs",
+  "dist/sdk.mjs",
+  "dist/sdk.d.ts",
   "AGENTS.md",
   "schemas/v-cli-plugin.schema.json",
   "skills/v-cli/SKILL.md",
@@ -64,6 +66,7 @@ function npmExecFile(args, options) {
 export function runPackGuard({ cwd = ROOT, keepTarball = false } = {}) {
   const errors = [];
   let tgzPath = null;
+  let tarEntries = [];
   try {
     // 1) dry-run 身份 + 文件清单（--ignore-scripts：dist 已由 npm run build 产出，避免测试期重建竞态）
     const dryOut = npmExecFile(["pack", "--dry-run", "--json", "--ignore-scripts"], {
@@ -107,6 +110,7 @@ export function runPackGuard({ cwd = ROOT, keepTarball = false } = {}) {
       errors.push(`tar -tf 失败: ${tar.stderr || tar.error?.message || "未知"}`);
     } else {
       const entries = tar.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+      tarEntries = entries;
       for (const required of REQUIRED_FILES) {
         if (!entries.some((e) => e === `package/${required}` || e.endsWith(`/${required}`))) {
           errors.push(`tar 中缺少必需文件: ${required}`);
@@ -120,7 +124,7 @@ export function runPackGuard({ cwd = ROOT, keepTarball = false } = {}) {
       }
     }
 
-    // 4) 包内 package.json 复核（依赖精确固定 + engines）
+    // 4) 包内 package.json 复核（依赖精确固定 + engines + SDK exports）
     const pkgOut = spawnSync("tar", ["-xOf", tarRel, "package/package.json"], { cwd, encoding: "utf-8" });
     if (pkgOut.status !== 0) {
       errors.push(`tar -xOf package/package.json 失败: ${pkgOut.stderr || "未知"}`);
@@ -142,6 +146,24 @@ export function runPackGuard({ cwd = ROOT, keepTarball = false } = {}) {
       }
       if (typeof inner.engines?.node !== "string" || !inner.engines.node.includes(">=20")) {
         errors.push(`包内 engines.node = ${JSON.stringify(inner.engines?.node)}（期望包含 >=20）`);
+      }
+      // SDK 出口：exports["."] 必须是 types + import，且目标文件真实在包内
+      const rootExport = inner.exports?.["."];
+      const exportTypes = typeof rootExport === "object" ? rootExport?.types : undefined;
+      const exportImport = typeof rootExport === "object" ? rootExport?.import : undefined;
+      if (exportTypes !== "./dist/sdk.d.ts" || exportImport !== "./dist/sdk.mjs") {
+        errors.push(
+          `包内 exports["."] = ${JSON.stringify(rootExport)}（期望 { types: "./dist/sdk.d.ts", import: "./dist/sdk.mjs" }）`,
+        );
+      } else {
+        for (const rel of [exportTypes, exportImport]) {
+          if (!tarEntries.includes(`package/${rel.replace(/^\.\//, "")}`)) {
+            errors.push(`包内 exports["."] 指向的文件不在 tar 中: ${rel}`);
+          }
+        }
+      }
+      if (inner.types !== "./dist/sdk.d.ts") {
+        errors.push(`包内 types = ${JSON.stringify(inner.types)}（期望 ./dist/sdk.d.ts）`);
       }
       if (inner.name !== EXPECTED_NAME || inner.version !== EXPECTED_VERSION) {
         errors.push(`包内 package.json 身份错误: ${inner.name}@${inner.version}`);

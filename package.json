@@ -1,11 +1,19 @@
 {
   "name": "@kevlns/v-cli",
   "version": "0.2.18",
-  "description": "kevlns 的个人工具箱 CLI（插件化架构，内置 + 本地插件）+ doctor/plugin/ts 命令",
+  "description": "kevlns 的个人工具箱 CLI（插件化架构 + 结构化 capability 注册/执行基座）+ doctor/plugin/ts/agent/project/capability 命令",
   "type": "module",
   "bin": {
     "v-cli": "dist/cli.mjs"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/sdk.d.ts",
+      "import": "./dist/sdk.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/sdk.d.ts",
   "files": [
     "dist/",
     "schemas/",

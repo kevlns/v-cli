@@ -87,8 +87,19 @@ describe("validateLocalCommand（apiVersion 1 本地插件契约）", () => {
     }
   });
 
-  it("保留名被拒绝：内置（doctor/plugin/ts/agent/help）与官方（xlmerge/unity）", () => {
-    for (const name of ["doctor", "plugin", "ts", "agent", "help", "xlmerge", "unity", "figma"]) {
+  it("保留名被拒绝：内置（doctor/plugin/ts/agent/help/project/capability）与官方（xlmerge/unity）", () => {
+    for (const name of [
+      "doctor",
+      "plugin",
+      "ts",
+      "agent",
+      "help",
+      "project",
+      "capability",
+      "xlmerge",
+      "unity",
+      "figma",
+    ]) {
       const result = validateLocalCommand({ ...GOOD, name });
       expect(result.ok, `name=${name}`).toBe(false);
     }

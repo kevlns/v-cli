@@ -55,9 +55,10 @@ describe("CLI 集成", () => {
 
   it("--help 列出内置命令与官方插件命令", () => {
     const help = run(["--help"], newHome());
-    for (const name of ["doctor", "plugin", "ts", "agent", "xlmerge", "unity"]) {
+    for (const name of ["doctor", "plugin", "ts", "agent", "project", "capability", "xlmerge", "unity"]) {
       expect(help).toContain(name);
     }
+    expect(help).toContain("AI Agent 快速开始");
   });
 
   it("ts 1710000000 转出正确时间", () => {
@@ -96,7 +97,7 @@ describe("CLI 集成", () => {
   it("plugin list 包含内置命令与官方插件行（官方依赖已安装）", () => {
     const data = JSON.parse(run(["plugin", "list", "--json"], newHome()));
     const names = data.filter((r: { source: string }) => r.source === "builtin").map((r: { name: string }) => r.name);
-    for (const name of ["doctor", "plugin", "ts", "agent"]) expect(names).toContain(name);
+    for (const name of ["doctor", "plugin", "ts", "agent", "project", "capability"]) expect(names).toContain(name);
     const official = data.filter((r: { source: string }) => r.source === "official");
     expect(official.map((r: { name: string }) => r.name).sort()).toEqual(["art", "figma", "ship", "unity", "xlmerge"]);
     const xl = official.find((r: { name: string }) => r.name === "xlmerge");
@@ -271,7 +272,18 @@ describe("CLI 集成：agent 索引", () => {
   it("agent index --json 包含三类命令与 builtin agent 命令自身", () => {
     const rows = JSON.parse(run(["agent", "index", "--json"], newHome()));
     const names = rows.map((r: { name: string }) => r.name);
-    for (const n of ["doctor", "plugin", "ts", "agent", "xlmerge", "unity"]) expect(names).toContain(n);
+    for (const n of ["doctor", "plugin", "ts", "agent", "project", "capability", "xlmerge", "unity"]) {
+      expect(names).toContain(n);
+    }
+    // 新内置命令携带完整 agent 元数据（arguments/options/output/exitCodes/safety）
+    const capabilityRow = rows.find((r: { name: string }) => r.name === "capability");
+    expect(capabilityRow.type).toBe("builtin");
+    expect(capabilityRow.metadataStatus).toBe("full");
+    expect(capabilityRow.commands.map((c: { path: string[] }) => c.path.join(" "))).toEqual([
+      "list",
+      "describe",
+      "run",
+    ]);
     const agentRow = rows.find((r: { name: string }) => r.name === "agent");
     expect(agentRow.type).toBe("builtin");
   });

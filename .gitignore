@@ -2,6 +2,8 @@ node_modules/
 dist/
 *.tgz
 .vcli/
+# 本仓库自身的工程绑定与操作记录：配置可入库，操作记录是本地证据不入库
+.vant/state/
 # 测试 fixture 的官方插件安装布局，必须纳入版本库
 !tests/fixtures/installed/node_modules/
 !tests/fixtures/installed/node_modules/@kevlns/u-cli-mod/dist/

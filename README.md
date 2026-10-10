@@ -27,7 +27,7 @@ v-cli 让你**用一个命令沉淀所有个人小工具**，而不用为每个�
 - **容错加载** - 单个插件语法错误、契约不符或注册异常只会被跳过并报告，绝不阻断其他命令
 - **双通道输出** - 结果走 stdout（可管道、可脚本化），诊断走 stderr
 - **agent 友好** - `agent docs`/`agent init` 让 AI Agent 自举读取引导文档；`agent index/describe` 输出统一索引与完整元数据；仓库内 AGENTS.md 自动生成并有漂移检查
-- **TypeScript-first** - 严格类型编写，tsup 将核心逻辑打包为单文件 ESM，仅保留 `commander` 运行依赖
+- **TypeScript-first** - 严格类型编写，tsup 将 CLI 与 SDK 各自打包为单文件 ESM（`dist/cli.mjs` / `dist/sdk.mjs` + `d.ts`），运行时依赖只有 `commander`
 
 ## Getting started
 
@@ -64,6 +64,43 @@ v-cli agent init .                  # （可选）把 AGENTS.md 写入工作区�
 
 `agent init [directory]`（默认当前目录）：已存在 AGENTS.md 时默认拒绝退出 1（`--force` 原子覆盖）；
 `--dry-run` 只报告不写入；符号链接目标 fail-closed 拒绝；`--json` 输出稳定结果。
+
+### 工程执行基座：capability / project
+
+v-cli 同时是**注册和执行基座**：capability 带稳定 id、版本、输入输出 schema、前置条件、声明的副作用、
+资源需求与重试语义；执行内核与 commander CLI 分离，并以 SDK 形式导出（`@kevlns/v-cli` 的
+`exports["."]` → `dist/sdk.mjs` + `dist/sdk.d.ts`），可被后续 MCP/Agent/Vant 组织层直接复用。
+
+```bash
+v-cli project init --project .                # 写入 .vant/config/v-cli.json（已存在拒绝覆盖）
+v-cli project inspect --project . --json      # 只读：配置/绑定目录/.vant 布局/provider 发现状态
+v-cli capability list --json                  # 列出 capability 与 provider 状态（不执行工具）
+v-cli capability describe unity.compile --json # 完整契约：schema/前置条件/副作用/资源/重试
+v-cli capability run unity.doctor --project . --json
+v-cli capability run unity.test-start --project . --set mode=EditMode --json   # 异步触发
+v-cli capability run unity.test-status --project . --operation-id poll-001 --json # 轮询状态
+```
+
+契约要点：
+
+- **执行状态与验收状态分离**：`execution.status`（succeeded/failed/cancelled/unknown）与
+  `acceptance.status`（passed/failed/not-run）各说各的；进程退出码 0 不能代替业务验收。
+- **退出码对齐**：0 = 验收 passed；1 = 执行或验收失败；2 = 未执行（入参/配置/前置条件/资源授权）；
+  3 = 已执行但验收 not-run（`acceptance.pending=true` 时按 `followUp` 轮询）；4 = 已确认取消；5 = 结果未知。
+- **工程根显式锚定**：`--project <目录>`；能力输入由 `.vant/config/v-cli.json` 的 binding 决定，
+  不接受 `projectPath` 一类覆盖；所有业务路径拒绝绝对路径、`..` 与符号链接越界。
+- **本地记录**：每次执行在 `<工程根>/.vant/state/operations/<operationId>/` 写输入摘要（脱敏）、
+  事件流与结果证据；`operationId` 已存在一律拒绝覆盖；`--no-persist` 可关闭（测试/SDK 探测）。
+- **职责分离**：`.vant/config/v-cli.json` 只放 CLI 能力/适配器绑定；角色/workflow/项目组织属于 Vant 的
+  `.vant/config/project.json`，v-cli 既不读也不写（在 v-cli.json 里写这类字段会被拒绝）。
+- **不假装资源锁**：资源需求只是声明；授权校验由组织层通过 SDK 的 `authorize` 钩子注入，
+  未注入时结果为 `resources.authorization: "not-enforced"`。
+
+首个 provider 是 Unity（基于已安装的 `@kevlns/u-cli-mod`，受控 argv 调用、无 shell 拼接）：
+`unity.doctor`、`unity.editor-status`、`unity.compile`、`unity.compile-status`、`unity.test-start`、
+`unity.test-status`、`unity.test-cancel`。其中 `unity.compile` / `unity.test-start` 是异步触发，
+只报告 accepted，必须轮询对应状态能力；测试只有 `completed` 且失败数 0 且有有效报告才算 passed。
+详细设计与取舍见仓库内 `.vant/docs/spec/registration-execution.md`。
 
 ### 官方插件命令
 
@@ -114,7 +151,7 @@ v-cli plugin list     # [local] hello 已出现
 ```
 
 > 缺少 `apiVersion: 1` 的插件会被拒绝并给出解释性错误，补上字段后重载即可。
-> 本地插件不能占用内置命令名（`doctor`/`plugin`/`ts`/`agent`/`help`）或官方命令名（`xlmerge`/`unity`/`figma`/`ship`/`art`）。
+> 本地插件不能占用内置命令名（`doctor`/`plugin`/`ts`/`agent`/`project`/`capability`/`help`）或官方命令名（`xlmerge`/`unity`/`figma`/`ship`/`art`）。
 
 ### 在脚本中消费输出
 
@@ -144,6 +181,26 @@ v-cli --json ts 1710000000 | jq .seconds   # 前置全局 --json 同样生效
 | `v-cli agent describe <name> [--json]` | 单个命令的完整记录；未找到时 stderr 报错并退出 1 |
 | `v-cli agent docs [--json]` | 输出当前包内置 AGENTS.md 原文；`--json` 输出 `{ package, version, sha256, content }`；缺失时退出 1 |
 | `v-cli agent init [directory] [--force] [--dry-run] [--json]` | 把内置 AGENTS.md 写入目录（默认 cwd）；已存在默认拒绝退出 1，`--force` 原子覆盖，`--dry-run` 只报告 |
+| `v-cli project init [--project <dir>] [--unity-project <dir>] [--editor-version <v>] [--test-mode <mode>] [--json]` | 写入 `.vant/config/v-cli.json`（仅 CLI 能力绑定）；已存在拒绝退出 1；不触碰 Vant 配置 |
+| `v-cli project inspect [--project <dir>] [--json]` | 只读检查配置/绑定目录/`.vant` 布局/provider 发现状态（不执行工具） |
+| `v-cli capability list [--provider <id>] [--json]` | 列出已注册 capability 与 provider 发现状态（只读） |
+| `v-cli capability describe <id> [--json]` | 单 capability 完整契约（schema/前置条件/副作用/资源/重试）；未注册退出 1 |
+| `v-cli capability run <id> [--project <dir>] [--input <json>] [--set k=v]… [--operation-id <id>] [--no-persist] [--json]` | 结构化执行；退出码 0/1/2/3/4/5 与结果对齐 |
+
+### SDK 出口（后续 MCP/Agent/组织层复用）
+
+```ts
+import {
+  CapabilityRegistry,        // 注册/校验/list/describe
+  createUnityProvider,       // 内置 provider
+  createDefaultRegistry,     // 内置注册表（含真实 NodeProcessExecutor）
+  runCapability,             // 执行内核（可注入 authorize 做资源授权校验）
+  exitCodeForResult,         // 结果 → 退出码
+  NodeProcessExecutor,       // 受控 argv 进程执行器（可替换为假执行器）
+  loadProjectConfig, initProjectConfig, inspectProject,  // .vant/config/v-cli.json
+  OperationStore,            // .vant/state/operations/<operationId>
+} from "@kevlns/v-cli";
+```
 
 ### 插件契约 `CliCommand`（apiVersion 1）
 
@@ -225,7 +282,7 @@ kevlns 工具家族共享同一套发布约定（tag 驱动、CI 护栏、MIT）
 | Node.js | `20` and later |
 | TypeScript | `5.6` and later（仅开发时） |
 
-CLI 核心逻辑以单文件 ESM（`dist/cli.mjs`）分发，运行时依赖 `commander` 与五个官方插件包
+CLI 核心逻辑以单文件 ESM（`dist/cli.mjs`）分发，SDK 出口为 `dist/sdk.mjs`（`exports["."]` + `dist/sdk.d.ts`）；运行时依赖 `commander` 与五个官方插件包
 （`@kevlns/xlmerge`、`@kevlns/u-cli-mod`、`@kevlns/figma-to-uprefab`，均为精确固定版本；安装 v-cli 时一起安装，
 未装时 `plugin list`/`doctor`/`agent index` 会如实报告 `missing` 状态）。
 

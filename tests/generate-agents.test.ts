@@ -101,6 +101,9 @@ describe("generate-agents.mjs", () => {
     expect(content).toContain("v-cli agent docs alpha");
     expect(content).toContain("v-cli agent describe alpha --json");
     expect(content).toContain("首次调用任何 official 插件命令前");
+    expect(content).toContain("v-cli project init|inspect");
+    expect(content).toContain("v-cli capability list|describe|run");
+    expect(content).toContain("验收状态分离");
     expect(content).toContain("v-cli agent index --json");
   });
 

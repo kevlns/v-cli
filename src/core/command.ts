@@ -38,7 +38,15 @@ export interface CliCommand {
 }
 
 /** 内置命令名 + help 保留名：本地/官方命令均不可占用 */
-export const RESERVED_COMMAND_NAMES = ["doctor", "plugin", "ts", "agent", "help"] as const;
+export const RESERVED_COMMAND_NAMES = [
+  "doctor",
+  "plugin",
+  "ts",
+  "agent",
+  "help",
+  "project",
+  "capability",
+] as const;
 
 /** 校验对象是否符合 CliCommand 形状（本地插件加载用）；apiVersion===1 是契约一部分 */
 export function isCliCommand(candidate: unknown): candidate is CliCommand {

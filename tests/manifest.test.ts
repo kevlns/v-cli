@@ -120,7 +120,7 @@ describe("validateManifest", () => {
   });
 
   it("保留命令名（内置）被拒绝", () => {
-    for (const name of ["doctor", "plugin", "ts", "agent", "help"]) {
+    for (const name of ["doctor", "plugin", "ts", "agent", "help", "project", "capability"]) {
       const m = validManifest();
       m.command = name;
       const result = validateManifest(m);

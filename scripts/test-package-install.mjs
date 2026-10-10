@@ -320,6 +320,18 @@ function smoke(filename) {
     const installedPkgRoot = IS_WIN
       ? path.join(prefix, "node_modules", "@kevlns", "v-cli")
       : path.join(prefix, "lib", "node_modules", "@kevlns", "v-cli");
+    const installedCapabilities = JSON.parse(cliExpectOk(prefix, ["capability", "list", "--json"], runOpts));
+    assert(installedCapabilities.capabilities.length === 7, "安装版 capability 注册表未包含七项 Unity 能力");
+    const sdkProbe = execFileSync(process.execPath, ["--input-type=module", "-e", `
+      import { pathToFileURL } from "node:url";
+      const sdk = await import(pathToFileURL(process.argv[1]).href);
+      if (sdk.createDefaultRegistry().list().length !== 7) throw new Error("SDK 注册表不可用");
+      if (typeof sdk.runCapability !== "function") throw new Error("SDK 执行入口缺失");
+      if (sdk.validateValue(false, {type:"boolean",enum:[true]}).length === 0) throw new Error("SDK 未执行真实校验");
+      console.log("installed-sdk-ok");
+    `, path.join(installedPkgRoot, "dist/sdk.mjs")], { encoding: "utf-8", cwd: runOpts.cwd, env: runOpts.env });
+    assert(sdkProbe.includes("installed-sdk-ok"), "安装版 SDK 导入失败");
+    console.log("[test:package] 安装版 capability 与 SDK 导入、注册、schema 校验通过");
     const installedDocs = fs.readFileSync(path.join(installedPkgRoot, "AGENTS.md"), "utf-8");
     const repoDocs = fs.readFileSync(path.join(ROOT, "AGENTS.md"), "utf-8");
     assert(installedDocs === repoDocs, "安装包内 AGENTS.md 与仓库 AGENTS.md 不一致");

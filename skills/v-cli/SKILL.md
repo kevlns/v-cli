@@ -12,10 +12,49 @@ description: >
 
 - `@kevlns/v-cli` 是 npm 全局安装的个人工具箱 CLI，插件化架构；环境要求 Node.js >= 20（`unity` 与 `figma` 插件仅 win32，其他平台 v-cli 拒绝路由）。
 - 命令分三类：
-  - **builtin**（内置）：`doctor`（环境体检）、`plugin list/path`（插件管理）、`ts`（时间戳互转）、`agent index/describe/docs/init`（agent 引导）。
+  - **builtin**（内置）：`doctor`（环境体检）、`plugin list/path`（插件管理）、`ts`（时间戳互转）、`agent index/describe/docs/init`（agent 引导）、`project init/inspect`（工程绑定）、`capability list/describe/run`（结构化能力执行）。
   - **local**：`~/.v-cli/commands/` 下的本地插件。
   - **official**（官方插件，经 v-cli 路由）：`xlmerge`、`unity`、`figma`、`ship`、`art`。
 - **本文件不写死任何版本号**：v-cli 本体与官方插件的实际版本、命令集合、参数一律以 `v-cli doctor` 与 `v-cli agent index --json` 的实时输出为准。
+
+## 工程执行基座：project / capability（结构化执行与验收分离）
+
+v-cli 是**注册和执行基座**：capability 具有稳定 id、版本、输入/输出 schema、前置条件、声明的副作用、资源需求与重试语义。
+Vant 组织层负责任务调度/持久化任务/资源租约；v-cli 只做注册与执行，并在 `<工程根>/.vant/state/operations/<operationId>/` 留本地记录。
+
+### 命令
+
+- `v-cli project init [--project <目录>] [--unity-project <目录>] [--editor-version <版本>] [--test-mode <EditMode|PlayMode>] [--json]`
+  — 写入 `.vant/config/v-cli.json`（只放 CLI 能力/适配器绑定）。**已存在一律拒绝**；不修改、不读 Vant 的 `.vant/config/project.json`（角色/workflow 归 Vant）。
+- `v-cli project inspect [--project <目录>] [--json]` — 只读检查配置、绑定目录、`.vant` 布局与 provider 发现状态。
+- `v-cli capability list [--provider <id>] [--json]` — 列出 capability（只读，不执行工具）。
+- `v-cli capability describe <id> [--json]` — 单能力完整契约；执行前先读它，不猜参数。
+- `v-cli capability run <id> [--project <目录>] [--input <json> | --input-file <路径>] [--set k=v]… [--operation-id <id>] [--task-id <id>] [--run-id <id>] [--no-persist] [--json]`
+
+### 硬性规则
+
+1. **验收与退出码**：进程退出码 0 不等于业务通过。`execution.status`（succeeded/failed/cancelled/unknown）与 `acceptance.status`（passed/failed/not-run）分开读。
+   `capability run` 退出码：`0` 验收 passed；`1` 执行或验收失败；`2` 未执行（入参/配置/前置条件/资源授权）；`3` 已执行但验收 not-run；`4` 已确认取消；`5` 结果未知。
+2. **退出码 3 = 未通过**：`acceptance.pending=true` 时按 `followUp` 轮询对应状态能力，不得把"已启动/已触发"报告为成功。
+3. **异步能力**：`unity.compile`/`unity.test-start` 只报告 accepted；完成判定用 `unity.compile-status`/`unity.test-status`。
+4. **测试通过判据**：只有 `test_status=completed` **且失败数 0 且存在有效报告**才算 passed；缺字段/未知取值一律不通过。
+5. **取消**：只有确认（响应字段或 `test_status` 探测）才认为取消生效；未确认不得报告已取消。
+6. **工程根**：一律 `--project` 显式锚定；能力输入不接受 `projectPath` 覆盖（用 `--set projectPath=…` 会因 schema `additionalProperties:false` 直接失败）。
+7. **配置缺失**：报 `project-config-missing` 时先 `v-cli project init --project <工程根>`；不要手写配置里的角色/workflow（会被拒绝）。
+8. **operationId**：默认自动生成；显式传入时同一 id 只能执行一次（已存在直接拒绝，绝不覆盖）。`--no-persist` 仅用于测试/SDK 探测，会失去本地证据记录。
+9. Unity capability 走受控 argv（不拼 shell）；exec 前默认自动 doctor 就绪核对（不得跳过）。真实 Unity 协议字段以 `capability describe` 与执行结果中的 `output`/`evidence` 为准，不要自行发明字段。
+
+### Unity capability 一览（先 describe 再 run）
+
+| id | 用途 | 验收 |
+|---|---|---|
+| `unity.doctor` | 只读体检（路由/CLI/适配包） | routeSupported+cli.state=valid+pipeline.installed+pipeline.state=current |
+| `unity.editor-status` | Editor/Pipeline 连接状态 | `status="ready"` |
+| `unity.compile` | 触发重编译（异步） | 一律 not-run(pending) → 轮询 `unity.compile-status` |
+| `unity.compile-status` | 重编译状态 | completed/up_to_date → passed；进行中 → pending；其余不通过 |
+| `unity.test-start` | 启动测试（固定 `--async_tests`） | 一律 not-run(pending) → 轮询 `unity.test-status` |
+| `unity.test-status` | 测试状态与失败数 | completed + 失败数 0 + 有效报告 → passed |
+| `unity.test-cancel` | 请求取消测试 | 需确认（响应或探测）才 passed |
 
 ## 能力发现协议（核心规则，必须遵守）
 
