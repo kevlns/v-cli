@@ -81,7 +81,7 @@ describe("CLI：project init / inspect", () => {
     expect(help.stdout).toContain("capability");
   });
 
-  it("project init 创建 .vant/config/v-cli.json（按注册集合生成默认段），重复执行被拒绝（退出 1）", () => {
+  it("project init 创建（全部默认段）→ 再跑 unchanged（退出 0）→ --reset 备份后重置", () => {
     const root = newTemp();
     const first = run(["project", "init", "--project", root, "--json"]);
     expect(first.status).toBe(0);
@@ -98,10 +98,53 @@ describe("CLI：project init / inspect", () => {
       },
     });
 
+    // 再跑：全部默认段齐备 → unchanged（幂等，退出 0）
     const second = run(["project", "init", "--project", root, "--json"]);
-    expect(second.status).toBe(1);
-    expect((second.json as { action: string }).action).toBe("refused");
-    expect(second.stderr).toContain("不覆盖已有配置");
+    expect(second.status).toBe(0);
+    expect((second.json as { action: string; added: string[] }).action).toBe("unchanged");
+
+    // --reset：备份 + 重置为默认段（--binding 覆盖生效）
+    const reset = run([
+      "project", "init", "--project", root, "--json", "--reset",
+      "--binding", 'unity={"projectDir":"Client","editorVersion":"2022.3.59f1c1"}',
+    ]);
+    expect(reset.status).toBe(0);
+    const resetPayload = reset.json as { action: string; backupPath: string; bindings: Record<string, unknown> };
+    expect(resetPayload.action).toBe("reset");
+    expect(resetPayload.backupPath).toContain("config-backups");
+    expect(existsSync(resetPayload.backupPath)).toBe(true);
+    expect(resetPayload.bindings.unity).toEqual({ projectDir: "Client", editorVersion: "2022.3.59f1c1" });
+    const afterReset = JSON.parse(readFileSync(join(root, ".vant", "config", "v-cli.json"), "utf-8"));
+    expect(afterReset.bindings.unity).toEqual({ projectDir: "Client", editorVersion: "2022.3.59f1c1" });
+    expect(afterReset.bindings.figma.stagingRoot).toBe("Client/Assets/Arts/Game/FigmaAssets/_Staging");
+  });
+
+  it("project init 幂等补全：旧式 unity-only 配置补 figma 段，已有段不动；--dry-run 不写", () => {
+    const root = newTemp();
+    expect(run(["project", "init", "--project", root, "--json"]).status).toBe(0);
+    // 还原为旧式（unity-only，带手工钉扎）
+    const configFile = join(root, ".vant", "config", "v-cli.json");
+    const oldStyle = { schemaVersion: 1, bindings: { unity: { projectDir: "Client", editorVersion: "2022.3.59f1c1" } } };
+    writeFileSync(configFile, `${JSON.stringify(oldStyle, null, 2)}
+`, "utf-8");
+
+    const dry = run(["project", "init", "--project", root, "--json", "--dry-run"]);
+    expect(dry.status).toBe(0);
+    const dryPayload = dry.json as { action: string; dryRun: boolean; added: string[] };
+    expect(dryPayload.action).toBe("reconciled");
+    expect(dryPayload.dryRun).toBe(true);
+    expect(dryPayload.added).toEqual(["figma"]);
+    // dry-run 未写：文件仍是 unity-only
+    expect(JSON.parse(readFileSync(configFile, "utf-8")).bindings).toEqual(oldStyle.bindings);
+
+    const real = run(["project", "init", "--project", root, "--json"]);
+    expect(real.status).toBe(0);
+    const realPayload = real.json as { action: string; added: string[] };
+    expect(realPayload.action).toBe("reconciled");
+    expect(realPayload.added).toEqual(["figma"]);
+    const merged = JSON.parse(readFileSync(configFile, "utf-8")) as { bindings: Record<string, unknown> };
+    expect(merged.bindings.unity).toEqual(oldStyle.bindings.unity); // 手工钉扎原样保留
+    expect((merged.bindings.figma as { stagingRoot: string }).stagingRoot).toContain("_Staging");
   });
 
   it("project init --binding 完整覆盖默认段；未知 Provider / 非法 JSON 被拒绝", () => {

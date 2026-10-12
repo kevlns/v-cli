@@ -210,24 +210,98 @@ describe("工程级 v-cli 配置（.vant/config/v-cli.json，通用外壳 + Prov
     if (loaded.ok) expect(loaded.resolved.unity.dirs.projectDir).toBe(resolveProjectRoot(p.root).root);
   });
 
-  it("project init：按注册集合生成默认段；已存在一律拒绝（无 --force）", () => {
+  it("project init：不存在创建；已存在幂等补全（手工字段保留）；再跑 unchanged", () => {
     const root = newDir();
     const rootRef = resolveProjectRoot(root);
     const first = initProjectConfig(rootRef, testProviders());
     expect(first.ok).toBe(true);
     if (first.ok) {
       expect(first.action).toBe("created");
+      expect(first.dryRun).toBe(false);
       const written = JSON.parse(fs.readFileSync(path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/")), "utf-8"));
       expect(written).toEqual({
         schemaVersion: 1,
         bindings: { unity: { projectDir: "Client" }, sample: { workspaceDir: "Sample" } },
       });
       expect(first.warnings.join()).toContain("当前不存在");
-      expect(first.bindings.unity).toEqual({ projectDir: "Client" });
+      expect(first.added).toEqual(["unity", "sample"]);
     }
-    const second = initProjectConfig(rootRef, testProviders());
-    expect(second.ok).toBe(false);
-    if (!second.ok) expect(second.reason).toContain("不覆盖已有配置");
+    // 模拟旧工程（只有 unity 段且带手工钉扎）：init → 幂等补全，unity 段逐字节不动
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    const oldStyle = { schemaVersion: 1, bindings: { unity: { projectDir: "Client", editorVersion: "2022.3.59f1c1" } } };
+    fs.writeFileSync(fileRef, JSON.stringify(oldStyle, null, 2) + "\n", "utf-8");
+    const reconciled = initProjectConfig(rootRef, testProviders());
+    expect(reconciled.ok).toBe(true);
+    if (reconciled.ok) {
+      expect(reconciled.action).toBe("reconciled");
+      expect(reconciled.added).toEqual(["sample"]);
+      const after = JSON.parse(fs.readFileSync(fileRef, "utf-8")) as { bindings: Record<string, unknown> };
+      expect(after.bindings.unity).toEqual(oldStyle.bindings.unity);
+      expect(after.bindings.sample).toEqual({ workspaceDir: "Sample" });
+    }
+    // 再跑：全部齐备 → unchanged，文件不变
+    const before = fs.readFileSync(fileRef, "utf-8");
+    const third = initProjectConfig(rootRef, testProviders());
+    expect(third.ok).toBe(true);
+    if (third.ok) expect(third.action).toBe("unchanged");
+    expect(fs.readFileSync(fileRef, "utf-8")).toBe(before);
+  });
+
+  it("幂等补全：dry-run 不写文件；非法 JSON / 未知 Provider 段拒绝", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    fs.mkdirSync(path.dirname(fileRef), { recursive: true });
+
+    fs.writeFileSync(fileRef, JSON.stringify({ schemaVersion: 1, bindings: { unity: { projectDir: "Client" } } }, null, 2) + "\n", "utf-8");
+    const dry = initProjectConfig(rootRef, testProviders(), {}, { dryRun: true });
+    expect(dry.ok).toBe(true);
+    if (dry.ok) {
+      expect(dry.action).toBe("reconciled");
+      expect(dry.dryRun).toBe(true);
+      expect(dry.added).toEqual(["sample"]);
+    }
+    expect((JSON.parse(fs.readFileSync(fileRef, "utf-8")) as { bindings: Record<string, unknown> }).bindings).toEqual({ unity: { projectDir: "Client" } });
+
+    fs.writeFileSync(fileRef, "{ not json", "utf-8");
+    const broken = initProjectConfig(rootRef, testProviders());
+    expect(broken.ok).toBe(false);
+    if (!broken.ok) expect(broken.reason).toContain("--reset");
+
+    fs.writeFileSync(fileRef, JSON.stringify({ schemaVersion: 1, bindings: { ghost: {} } }, null, 2) + "\n", "utf-8");
+    const ghost = initProjectConfig(rootRef, testProviders());
+    expect(ghost.ok).toBe(false);
+    if (!ghost.ok) expect(ghost.reason).toContain("ghost");
+  });
+
+  it("--reset：旧配置字节级备份 + 原子重置为默认段（--binding 生效）；dry-run 不写", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    fs.mkdirSync(path.dirname(fileRef), { recursive: true });
+    const original = JSON.stringify({ schemaVersion: 1, bindings: { unity: { projectDir: "Custom", editorVersion: "2022.3.59f1c1" } } }, null, 2) + "\n";
+    fs.writeFileSync(fileRef, original, "utf-8");
+
+    const dry = initProjectConfig(rootRef, testProviders(), {}, { reset: true, dryRun: true });
+    expect(dry.ok).toBe(true);
+    if (dry.ok) {
+      expect(dry.action).toBe("reset");
+      expect(dry.dryRun).toBe(true);
+    }
+    expect(fs.readFileSync(fileRef, "utf-8")).toBe(original);
+
+    const reset = initProjectConfig(rootRef, testProviders(), { sample: { workspaceDir: "Other" } }, { reset: true });
+    expect(reset.ok).toBe(true);
+    if (reset.ok) {
+      expect(reset.action).toBe("reset");
+      expect(reset.backupPath).toBeTruthy();
+      expect(fs.readFileSync(reset.backupPath!, "utf-8")).toBe(original);
+      expect(reset.backupPath!.split(path.sep).join("/")).toContain(".vant/state/config-backups/");
+      const after = JSON.parse(fs.readFileSync(fileRef, "utf-8")) as { bindings: Record<string, unknown> };
+      expect(after.bindings.unity).toEqual({ projectDir: "Client" });
+      expect(after.bindings.sample).toEqual({ workspaceDir: "Other" });
+      expect(reset.added).toEqual(["unity", "sample"]);
+    }
   });
 
   it("project init 的 overrides 完整替换默认段；未知 Provider 覆盖被拒绝", () => {
@@ -248,19 +322,20 @@ describe("工程级 v-cli 配置（.vant/config/v-cli.json，通用外壳 + Prov
     if (!refused.ok) expect(refused.reason).toContain("未知 Provider 绑定覆盖");
   });
 
-  it("project init 不触碰 Vant 的 project.json（内容逐字节不变）", () => {
+  it("project init 不触碰 Vant 的 project.json（补全/创建/reset 三路径内容逐字节不变）", () => {
     const p = project({ withVantProjectConfig: { schemaVersion: 1, roles: [{ name: "client" }] } });
     const vantFile = path.join(p.root, ...VANT_PROJECT_CONFIG_RELATIVE.split("/"));
     const before = fs.readFileSync(vantFile, "utf-8");
-    const result = initProjectConfig(resolveProjectRoot(p.root), testProviders());
-    // v-cli.json 已存在（由 fixture 写入）→ 拒绝；无论如何 Vant 配置不改
-    expect(result.ok).toBe(false);
+    const reconciled = initProjectConfig(resolveProjectRoot(p.root), testProviders());
+    expect(reconciled.ok).toBe(true);
     expect(fs.readFileSync(vantFile, "utf-8")).toBe(before);
-    // 换一个已存在的 v-cli.json 场景：先删掉再 init，project.json 依然不变
     fs.rmSync(p.configFile);
     const created = initProjectConfig(resolveProjectRoot(p.root), testProviders());
     expect(created.ok).toBe(true);
     if (created.ok) expect(created.vantConfig.exists).toBe(true);
+    expect(fs.readFileSync(vantFile, "utf-8")).toBe(before);
+    const reset = initProjectConfig(resolveProjectRoot(p.root), testProviders(), {}, { reset: true });
+    expect(reset.ok).toBe(true);
     expect(fs.readFileSync(vantFile, "utf-8")).toBe(before);
   });
 
@@ -448,5 +523,129 @@ describe("inspect 归因（invalid 配置逐 Provider 状态）", () => {
     expect(report.config.kind).toBe("missing");
     expect(report.config.providerBindings.map((b) => b.state)).toEqual(["missing-binding", "missing-binding"]);
     expect(report.config.providerBindings.every((b) => b.errors.length === 1)).toBe(true);
+  });
+});
+
+describe("init 修订一审修复回归", () => {
+  it("dry-run --reset：不创建备份目录/文件（零副作用预演）", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    fs.mkdirSync(path.dirname(fileRef), { recursive: true });
+    fs.writeFileSync(fileRef, JSON.stringify({ schemaVersion: 1, bindings: { unity: { projectDir: "Client" } } }, null, 2) + "\n", "utf-8");
+    const dry = initProjectConfig(rootRef, testProviders(), {}, { reset: true, dryRun: true });
+    expect(dry.ok).toBe(true);
+    if (dry.ok) expect(dry.backupPath).toBeUndefined();
+    expect(fs.existsSync(path.join(root, ".vant", "state", "config-backups"))).toBe(false);
+  });
+
+  it("--binding 指向已有段 → 拒绝并指路 --reset（显式意图不可静默丢弃）", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    fs.mkdirSync(path.dirname(fileRef), { recursive: true });
+    fs.writeFileSync(fileRef, JSON.stringify({ schemaVersion: 1, bindings: { unity: { projectDir: "Client" } } }, null, 2) + "\n", "utf-8");
+    const result = initProjectConfig(rootRef, testProviders(), { unity: { projectDir: "ZZZ" } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("--reset");
+    // 文件未动
+    expect(JSON.parse(fs.readFileSync(fileRef, "utf-8")).bindings.unity).toEqual({ projectDir: "Client" });
+  });
+
+  it("schemaVersion≠1 的现有配置 → 拒绝（不降级改写）", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    fs.mkdirSync(path.dirname(fileRef), { recursive: true });
+    fs.writeFileSync(fileRef, JSON.stringify({ schemaVersion: 2, bindings: { unity: { projectDir: "Client" } } }, null, 2) + "\n", "utf-8");
+    const result = initProjectConfig(rootRef, testProviders());
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("schemaVersion");
+    expect(fs.readFileSync(fileRef, "utf-8")).toContain('"schemaVersion": 2'); // 未被改写
+  });
+
+  it("齐备但含未知 Provider 段 → 拒绝（不静默报 unchanged）", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    fs.mkdirSync(path.dirname(fileRef), { recursive: true });
+    fs.writeFileSync(
+      fileRef,
+      JSON.stringify({ schemaVersion: 1, bindings: { unity: { projectDir: "Client" }, sample: { workspaceDir: "S" }, ghost: {} } }, null, 2) + "\n",
+      "utf-8",
+    );
+    const result = initProjectConfig(rootRef, testProviders());
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("ghost");
+  });
+
+  it("非规范格式（CRLF/4 空格）补全：值与键序保留，格式规范化（行为钉死）", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    fs.mkdirSync(path.dirname(fileRef), { recursive: true });
+    fs.writeFileSync(fileRef, '{\r\n    "schemaVersion": 1,\r\n    "bindings": {\r\n        "unity": {\r\n            "projectDir": "Client"\r\n        }\r\n    }\r\n}\r\n', "utf-8");
+    const result = initProjectConfig(rootRef, testProviders());
+    expect(result.ok).toBe(true);
+    const after = JSON.parse(fs.readFileSync(fileRef, "utf-8")) as { bindings: Record<string, unknown> };
+    expect(Object.keys(after.bindings)).toEqual(["unity", "sample"]); // 键序保留 + 追加
+    expect(after.bindings.unity).toEqual({ projectDir: "Client" });
+    expect(fs.readFileSync(fileRef, "utf-8")).not.toContain("\r\n"); // 格式规范化
+  });
+
+  it("unchanged 路径的 dryRun 字段如实", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const first = initProjectConfig(rootRef, testProviders());
+    expect(first.ok).toBe(true);
+    const second = initProjectConfig(rootRef, testProviders(), {}, { dryRun: true });
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.action).toBe("unchanged");
+      expect(second.dryRun).toBe(true);
+    }
+  });
+});
+
+describe("init 修订二审修复回归", () => {
+  it("配置文件为符号链接 → init 幂等补全拒绝（对齐 loadProjectConfig fail-closed）", () => {
+    const p = project();
+    const outside = newDir();
+    const linkPath = p.configFile;
+    fs.rmSync(linkPath);
+    if (!tryLinkDir(outside, linkPath)) {
+      expect(true).toBe(true);
+      return;
+    }
+    // 链接指向目录：替换为文件链接不可靠——直接断言 init 被拒绝（PathSafetyError 转 refused 或抛出均可接受为 fail-closed）
+    let refusedOrThrew = false;
+    try {
+      const result = initProjectConfig(resolveProjectRoot(p.root), testProviders());
+      refusedOrThrew = !result.ok;
+    } catch {
+      refusedOrThrew = true;
+    }
+    expect(refusedOrThrew).toBe(true);
+  });
+
+  it("结果携带 existed：dry-run reset + 已存在文件 → existed=true 且无 backupPath", () => {
+    const root = newDir();
+    const rootRef = resolveProjectRoot(root);
+    const fileRef = path.join(root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+    fs.mkdirSync(path.dirname(fileRef), { recursive: true });
+    fs.writeFileSync(fileRef, JSON.stringify({ schemaVersion: 1, bindings: { unity: { projectDir: "Client" } } }, null, 2) + "\n", "utf-8");
+    const dry = initProjectConfig(rootRef, testProviders(), {}, { reset: true, dryRun: true });
+    expect(dry.ok).toBe(true);
+    if (dry.ok) {
+      expect(dry.existed).toBe(true);
+      expect(dry.backupPath).toBeUndefined();
+    }
+    const created = initProjectConfig(rootRef, testProviders(), {}, { reset: true, dryRun: true });
+    void created;
+    // 全新目录 + dry-run reset：existed=false
+    const fresh = newDir();
+    const freshDry = initProjectConfig(resolveProjectRoot(fresh), testProviders(), {}, { reset: true, dryRun: true });
+    expect(freshDry.ok).toBe(true);
+    if (freshDry.ok) expect(freshDry.existed).toBe(false);
   });
 });

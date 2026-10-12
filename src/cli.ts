@@ -81,7 +81,7 @@ async function main(): Promise<number> {
       "  4. v-cli agent init .            （可选：写入工作区 AGENTS.md，AI Agent 自动读取）",
       "",
       "工程执行基座（结构化能力，验收与退出码分离）：",
-      "  v-cli project init --project .                    （写入 .vant/config/v-cli.json，已存在拒绝覆盖）",
+      "  v-cli project init --project .                    （写入 .vant/config/v-cli.json，幂等补全（已有段不动））",
       "  v-cli capability list --json                      （列能力 + provider 状态，不执行工具）",
       "  v-cli capability describe unity.doctor --json     （完整契约：schema/前置条件/副作用/资源/重试）",
       "  v-cli capability run unity.doctor --project . --json",

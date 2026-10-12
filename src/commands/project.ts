@@ -14,7 +14,7 @@ import { createDefaultRegistry } from "../default-registry";
 const PROJECT_HELP_TEXT = [
   "project：工程根绑定与只读检查。",
   "",
-  `  init     写入 ${PROJECT_CLI_CONFIG_RELATIVE}（通用外壳：schemaVersion + 按 Provider 分组的 bindings；已存在一律拒绝，绝不覆盖）`,
+  `  init     初始化/幂等补全 ${PROJECT_CLI_CONFIG_RELATIVE}（通用外壳：缺默认段的 Provider 补段，已有段不动；--reset 显式重置并先备份）`,
   "  inspect  只读检查：配置文件与绑定目录、.vant 布局、按注册集合的 provider 绑定状态（不执行任何工具）",
   "",
   "职责分离：角色/workflow/项目组织属于 Vant 的 .vant/config/project.json；",
@@ -66,20 +66,20 @@ export function parseBindingOptions(pairs: string[]): Record<string, Record<stri
 /** project：工程根显式锚定、配置初始化与只读检查 */
 export const project: CliCommand = {
   name: "project",
-  description: "project：init 初始化 .vant/config/v-cli.json（不覆盖），inspect 只读检查绑定与 provider 状态",
+  description: "project：init 初始化/幂等补全 .vant/config/v-cli.json（已有段不动；--reset 显式重置），inspect 只读检查",
   apiVersion: 1,
 
   agent: {
     whenToUse:
       "当工程尚未初始化 v-cli 工程配置（.vant/config/v-cli.json）或需要确认绑定是否就绪时使用：" +
-      "`project inspect --json` 只读检查，`project init --project <工程根>` 写入默认绑定（已存在拒绝覆盖）；" +
+      "`project inspect --json` 只读检查，`project init --project <工程根>` 初始化/幂等补全默认绑定（已有段不动，重复执行安全）；" +
       "capability run 报 project-config-missing 时按提示初始化",
     globalOptions: [{ flags: "-h, --help", description: "显示命令帮助" }],
     commands: [
       {
         path: ["init"],
-        usage: "v-cli project init [--project <dir>] [--binding <providerId>=<JSON>]... [--json]",
-        description: `写入 ${PROJECT_CLI_CONFIG_RELATIVE}（为有默认绑定的 Provider 生成段，--binding 完整覆盖；已存在拒绝，不触碰 Vant 配置）`,
+        usage: "v-cli project init [--project <dir>] [--binding <providerId>=<JSON>]... [--reset] [--dry-run] [--json]",
+        description: `初始化/幂等补全 ${PROJECT_CLI_CONFIG_RELATIVE}：不存在则创建；已存在则只为缺失绑定段的 Provider 补默认段（已有段与字段一律不动）；--reset 先备份到 .vant/state/config-backups/ 再原子替换。不触碰 Vant 配置`,
         arguments: [],
         options: [
           { flags: "--project <dir>", description: "工程根（默认当前目录）" },
@@ -88,12 +88,15 @@ export const project: CliCommand = {
             description:
               "覆盖某 Provider 的绑定段（可重复；JSON 对象，完整替换该 Provider 的默认段；各字段契约见 capability describe / Provider 文档）",
           },
+          { flags: "--reset", description: "显式重置：旧配置先备份到 .vant/state/config-backups/，再按默认段（+ --binding）原子替换" },
+          { flags: "--dry-run", description: "只报告将要做的变更（action/added），不写任何文件" },
           { flags: "--json", description: "输出机器可读 JSON" },
         ],
-        output: { format: "json", description: "ok/action/file/bytes/sha256/bindings/warnings/vantConfig（只读提示）" },
-        exitCodes: { "0": "创建成功", "1": "已存在被拒绝 / 目录、路径或 --binding 非法" },
+        output: { format: "json", description: "ok/action(created|reconciled|unchanged|reset)/dryRun/added/file/bytes/sha256/backupPath?/bindings/warnings/vantConfig" },
+        exitCodes: { "0": "成功（含 unchanged）", "1": "配置非法无法安全补全 / 目录、路径或 --binding 非法" },
         safety: [
-          "refuses-existing",
+          "idempotent-reconcile-only-adds",
+          "reset-requires-explicit-flag-and-backs-up",
           "fail-closed-symlink",
           "never-writes-vant-config",
           "writes-config-atomic",
@@ -118,7 +121,7 @@ export const project: CliCommand = {
   register(program: Command, ctx: CliContext) {
     program
       .command("init")
-      .description(`写入 ${PROJECT_CLI_CONFIG_RELATIVE}（已存在一律拒绝；不触碰 Vant 配置）`)
+      .description(`初始化/幂等补全 ${PROJECT_CLI_CONFIG_RELATIVE}（已有段不动；--reset 显式重置并先备份；不触碰 Vant 配置）`)
       .option("--project <dir>", "工程根（默认当前目录）")
       .option(
         "--binding <providerId>=<JSON>",
@@ -126,15 +129,20 @@ export const project: CliCommand = {
         (value: string, previous: string[] = []) => [...previous, value],
         [] as string[],
       )
+      .option("--reset", "显式重置：旧配置先备份到 .vant/state/config-backups/，再按默认段原子替换")
+      .option("--dry-run", "只报告将要做的变更（action/added），不写任何文件")
       .option("--json", "输出机器可读 JSON")
       .addHelpText("after", PROJECT_HELP_TEXT)
-      .action((opts: { project?: string; binding: string[]; json?: boolean }) => {
+      .action((opts: { project?: string; binding: string[]; reset?: boolean; dryRun?: boolean; json?: boolean }) => {
         const json = ctx.json || opts.json;
         const registry = createDefaultRegistry();
         try {
           const overrides = parseBindingOptions(opts.binding ?? []);
           const root = resolveProjectRoot(opts.project);
-          const result = initProjectConfig(root, toProviderSet(registry.listProviders()), overrides);
+          const result = initProjectConfig(root, toProviderSet(registry.listProviders()), overrides, {
+            reset: opts.reset,
+            dryRun: opts.dryRun,
+          });
           if (json) {
             ctx.log.result(result);
             if (!result.ok) {
@@ -148,9 +156,18 @@ export const project: CliCommand = {
             process.exitCode = 1;
             return;
           }
+          const actionLabel: Record<typeof result.action, string> = {
+            created: result.dryRun ? "将创建配置" : "已创建配置",
+            reconciled: `${result.dryRun ? "将幂等补全" : "已幂等补全"}（新增段: ${result.added.join(", ")}；已有段未改动）`,
+            unchanged: "配置已齐备，无需补全（未改动任何内容）",
+            reset: result.existed
+              ? `${result.dryRun ? "将重置" : "已重置"}为默认段${result.dryRun ? "（旧配置将先备份到 .vant/state/config-backups/）" : "（旧配置已备份）"}`
+              : `${result.dryRun ? "将创建" : "已创建"}配置（原不存在，--reset 等价于创建）`,
+          };
           const lines = [
-            `已写入 ${result.file}（${result.bytes} 字节，SHA-256 ${result.sha256.slice(0, 12)}…）`,
+            `${result.dryRun ? "[dry-run] " : ""}${actionLabel[result.action]} → ${result.file}（${result.bytes} 字节，SHA-256 ${result.sha256.slice(0, 12)}…）`,
             `工程根: ${result.projectRoot}`,
+            ...(result.backupPath && !result.dryRun ? [`旧配置已备份: ${result.backupPath}`] : []),
             ...Object.entries(result.bindings).map(([id, section]) => `绑定 ${id}: ${JSON.stringify(section)}`),
             result.vantConfig.exists
               ? `检测到 Vant 配置 ${VANT_PROJECT_CONFIG_RELATIVE}（只读提示，v-cli 未做任何修改）`

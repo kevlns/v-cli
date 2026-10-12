@@ -12,7 +12,8 @@
  *   已声明但无效的绑定（未知 Provider / schema 不符 / 路径越界 / 强核对不一致）
  *   使整个配置 fail-closed。
  * - 无配置文件时不猜测：报错并给出 `v-cli project init` 初始化指引。
- * - project init 绝不覆盖已有配置；也绝不改动任何 Vant 配置文件。
+ * - project init 幂等补全：已有段只增不改；--reset 显式重置（先备份到 .vant/state/config-backups/）；
+ *   也绝不改动任何 Vant 配置文件。
  */
 
 import fs from "node:fs";
@@ -352,17 +353,27 @@ export function renderProjectConfig(
   };
 }
 
+export type InitAction = "created" | "reconciled" | "unchanged" | "reset" | "refused";
+
 export type InitProjectConfigResult =
   | {
       ok: true;
-      action: "created";
+      action: Exclude<InitAction, "refused">;
+      /** true = 仅报告将要做的变更，未写任何文件 */
+      dryRun: boolean;
+      /** 本次新增的 provider 段 id（reconciled 路径；created/reset 为全部生成段） */
+      added: string[];
       file: string;
       relativeFile: string;
       bytes: number;
       sha256: string;
       projectRoot: string;
-      /** 生成的绑定段（provider id -> section） */
+      /** 结果文件中的绑定段（provider id -> section） */
       bindings: Record<string, unknown>;
+      /** --reset 时旧配置的备份路径（.vant/state 内，不入 Git；dry-run 不产生） */
+      backupPath?: string;
+      /** 执行前配置文件是否已存在（文本输出区分 reset/等价创建） */
+      existed: boolean;
       /** 只读提示：检测到的 Vant 配置文件（v-cli 不修改） */
       vantConfig: { file: string; exists: boolean };
       warnings: string[];
@@ -377,46 +388,172 @@ export type InitProjectConfigResult =
       vantConfig: { file: string; exists: boolean };
     };
 
+/** --reset 时旧配置备份目录（.vant/state 内，不入 Git） */
+const CONFIG_BACKUP_RELATIVE = ".vant/state/config-backups";
+
+/** 原子替换配置文件（tmp + rename；失败清理 tmp 后抛出原异常） */
+function atomicWriteConfig(project: ProjectRoot, file: string, content: string): void {
+  const configDir = path.dirname(file);
+  // 目录链安全：.vant / config 已存在时不得是越界符号链接
+  resolveInsideProject(project, ".vant/config", ".vant/config");
+  fs.mkdirSync(configDir, { recursive: true });
+  const tmpPath = `${file}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, content, { encoding: "utf-8" });
+    fs.renameSync(tmpPath, file);
+  } catch (err) {
+    try {
+      fs.rmSync(tmpPath, { force: true });
+    } catch {
+      // 清理失败不影响原异常
+    }
+    throw err;
+  }
+}
+
 /**
- * 初始化 .vant/config/v-cli.json：已存在一律拒绝（不提供 --force），
- * 不触碰 .vant/config/project.json。绑定段 = 有 defaultBinding 的 Provider 的
- * 默认段，可被 overrides 完整替换（provider id -> 绑定段）；写入前做全量校验。
+ * 初始化/幂等补全 .vant/config/v-cli.json（不触碰 .vant/config/project.json）：
+ *
+ * - 配置不存在 → 创建（有 defaultBinding 的 Provider 生成默认段，--binding 完整覆盖该段）。
+ * - 配置已存在（默认路径）→ **幂等补全**：只为"缺失绑定段且 Provider 有 defaultBinding"的
+ *   Provider 补默认段；已有段的键、值与键序不动（文件整体按规范 2 空格格式重排——
+ *   v-cli 自产的 canonical 文件补全后逐字节稳定，手编的非规范格式会被规范化）。全段齐备 → unchanged。
+ * - `reset: true` → **显式重置**：先把旧配置字节原样备份到 .vant/state/config-backups/，
+ *   再按默认段（+ --binding 覆盖）原子替换。绝不在默认路径删除任何内容。
+ * - `dryRun: true` → 只报告将要做的变更（added / action），不写任何文件。
+ *
+ * 所有写入路径先过全量校验（外壳 + 绑定契约 + 强核对），失败拒绝且不落盘。
  */
 export function initProjectConfig(
   project: ProjectRoot,
   providers: ProviderSet,
   overrides: Record<string, Record<string, unknown>> = {},
+  options: { reset?: boolean; dryRun?: boolean } = {},
 ): InitProjectConfigResult {
   const file = path.join(project.root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
   const vantFile = path.join(project.root, ...VANT_PROJECT_CONFIG_RELATIVE.split("/"));
   const vantConfig = { file: vantFile, exists: fs.existsSync(vantFile) };
-
-  if (fs.existsSync(file)) {
-    return {
-      ok: false,
-      action: "refused",
-      file,
-      relativeFile: PROJECT_CLI_CONFIG_RELATIVE,
-      projectRoot: project.root,
-      reason: `已存在 ${PROJECT_CLI_CONFIG_RELATIVE}：project init 不覆盖已有配置（如需修改请手工编辑）`,
-      vantConfig,
-    };
-  }
+  const refused = (reason: string): InitProjectConfigResult => ({
+    ok: false,
+    action: "refused",
+    file,
+    relativeFile: PROJECT_CLI_CONFIG_RELATIVE,
+    projectRoot: project.root,
+    reason,
+    vantConfig,
+  });
 
   const unknownOverrides = Object.keys(overrides).filter((id) => !providers.has(id));
   if (unknownOverrides.length > 0) {
     const known = [...providers.keys()].sort().join(", ") || "（无已注册 Provider）";
+    return refused(`未知 Provider 绑定覆盖: ${unknownOverrides.join(", ")}（已注册: ${known}）`);
+  }
+
+  const exists = fs.existsSync(file);
+  const reset = options.reset === true;
+  const dryRun = options.dryRun === true;
+
+  // ---------- 已存在且非 reset：幂等补全 ----------
+  if (exists && !reset) {
+    // 文件级链接检查（对齐 loadProjectConfig 的 fail-closed：配置文件不得为符号链接/联接）
+    resolveInsideProject(project, PROJECT_CLI_CONFIG_RELATIVE, PROJECT_CLI_CONFIG_RELATIVE);
+    let existing: { schemaVersion?: unknown; bindings?: unknown };
+    try {
+      existing = JSON.parse(fs.readFileSync(file, "utf-8")) as { schemaVersion?: unknown; bindings?: unknown };
+    } catch (err) {
+      return refused(
+        `已存在 ${PROJECT_CLI_CONFIG_RELATIVE} 但不是合法 JSON（${err instanceof Error ? err.message : String(err)}）：幂等补全要求可解析，请修正后重试或显式 --reset（将先备份旧文件）`,
+      );
+    }
+    if (!isPlainObject(existing) || !isPlainObject(existing.bindings)) {
+      return refused(`已存在 ${PROJECT_CLI_CONFIG_RELATIVE} 但结构非法（缺少 bindings 对象）：请修正后重试或显式 --reset`);
+    }
+    if (existing.schemaVersion !== 1) {
+      return refused(
+        `已存在 ${PROJECT_CLI_CONFIG_RELATIVE} 的 schemaVersion=${JSON.stringify(existing.schemaVersion)}（本版本只支持 1）：拒绝降级/改写已有字段，请用对应版本处理或显式 --reset（将先备份）`,
+      );
+    }
+    const existingBindings = existing.bindings as Record<string, unknown>;
+    // 现有段里出现未注册 Provider / 声明无效段 → 全量校验必然失败，补全前明确拒绝（fail-closed）
+    const shellCheck = validateProjectCliConfig(existing);
+    if (shellCheck.length > 0) {
+      return refused(`已存在配置未通过外壳校验（${shellCheck.join("；")}）：请修正后重试或显式 --reset`);
+    }
+    const added: string[] = [];
+    const warnings: string[] = [];
+    const merged: Record<string, unknown> = { ...existingBindings };
+    // --binding 指向已有段：显式意图不可静默丢弃（幂等补全不改已有段）→ 拒绝并指路
+    const ignoredOverrides = Object.keys(overrides).filter((id) => merged[id] !== undefined);
+    if (ignoredOverrides.length > 0) {
+      return refused(
+        `--binding 指向已有绑定段（${ignoredOverrides.join(", ")}）：幂等补全不改已有段；如需覆盖请用 --reset（将先备份）或手工编辑`,
+      );
+    }
+    for (const provider of providers.values()) {
+      if (merged[provider.id] !== undefined) continue; // 已有段一律不动
+      const override = overrides[provider.id];
+      if (override !== undefined) {
+        merged[provider.id] = override;
+        added.push(provider.id);
+        continue;
+      }
+      if (!provider.defaultBinding) continue;
+      const rendered = provider.defaultBinding(project);
+      merged[provider.id] = rendered.section;
+      added.push(provider.id);
+      warnings.push(...rendered.warnings);
+    }
+    // 齐备时同样全量校验：不因"无需补全"而放过无效配置（fail-closed 一致性）
+    if (added.length === 0) {
+      const existingCheck = resolveBindings(project, { schemaVersion: 1, bindings: existingBindings }, providers);
+      if (!existingCheck.ok) {
+        return refused(`配置齐备但存在无效绑定（${existingCheck.errors.join("；")}）：请修正或显式 --reset`);
+      }
+      const current = fs.readFileSync(file, "utf-8");
+      return {
+        ok: true,
+        action: "unchanged",
+        dryRun,
+        existed: true,
+        added: [],
+        file,
+        relativeFile: PROJECT_CLI_CONFIG_RELATIVE,
+        bytes: Buffer.byteLength(current, "utf-8"),
+        sha256: createHash("sha256").update(current, "utf-8").digest("hex"),
+        projectRoot: project.root,
+        bindings: existingBindings,
+        vantConfig,
+        warnings: [],
+      };
+    }
+    const candidate: ProjectCliConfig = { schemaVersion: 1, bindings: merged };
+    const content = `${JSON.stringify(candidate, null, 2)}\n`;
+    const bindingResult = resolveBindings(project, candidate, providers);
+    if (!bindingResult.ok) {
+      // 已有段本身非法或新默认段与现有状态冲突：拒绝，不落盘
+      return refused(`补全后的配置未通过校验（${bindingResult.errors.join("；")}）：请修正已有段或显式 --reset`);
+    }
+    if (!dryRun) {
+      atomicWriteConfig(project, file, content);
+    }
     return {
-      ok: false,
-      action: "refused",
+      ok: true,
+      action: "reconciled",
+      dryRun,
+      existed: true,
+      added,
       file,
       relativeFile: PROJECT_CLI_CONFIG_RELATIVE,
+      bytes: Buffer.byteLength(content, "utf-8"),
+      sha256: createHash("sha256").update(content, "utf-8").digest("hex"),
       projectRoot: project.root,
-      reason: `未知 Provider 绑定覆盖: ${unknownOverrides.join(", ")}（已注册: ${known}）`,
+      bindings: merged,
       vantConfig,
+      warnings,
     };
   }
 
+  // ---------- 创建 / 显式 reset：同一渲染路径 ----------
   const rendered = renderProjectConfig(project, providers.values(), overrides);
   const candidate = JSON.parse(rendered.content) as ProjectCliConfig;
   const shellErrors = validateProjectCliConfig(candidate);
@@ -424,34 +561,44 @@ export function initProjectConfig(
   const bindingErrors = bindingResult.ok ? [] : bindingResult.errors;
   const allErrors = [...shellErrors, ...bindingErrors];
   if (allErrors.length > 0) {
-    return {
-      ok: false,
-      action: "refused",
-      file,
-      relativeFile: PROJECT_CLI_CONFIG_RELATIVE,
-      projectRoot: project.root,
-      reason: `生成的配置未通过校验: ${allErrors.join("；")}`,
-      vantConfig,
-    };
+    return refused(`生成的配置未通过校验: ${allErrors.join("；")}`);
   }
 
-  // 目录链安全：.vant / config 已存在时不得是越界符号链接
-  const configDir = path.join(project.root, ".vant", "config");
-  resolveInsideProject(project, ".vant/config", ".vant/config");
-  fs.mkdirSync(configDir, { recursive: true });
+  let backupPath: string | undefined;
+  if (reset && exists && !dryRun) {
+    const backupDir = path.join(project.root, ...CONFIG_BACKUP_RELATIVE.split("/"));
+    resolveInsideProject(project, CONFIG_BACKUP_RELATIVE, CONFIG_BACKUP_RELATIVE);
+    fs.mkdirSync(backupDir, { recursive: true });
+    const stamp = `${new Date().toISOString().replace(/[:.]/g, "-")}-${process.pid.toString(36)}`;
+    backupPath = path.join(backupDir, `v-cli.${stamp}.json`);
+    fs.copyFileSync(file, backupPath);
+  }
 
-  // wx：绝不覆盖（与上面的存在性检查双保险）
-  fs.writeFileSync(file, rendered.content, { encoding: "utf-8", flag: "wx" });
+  if (!dryRun) {
+    if (exists) {
+      atomicWriteConfig(project, file, rendered.content);
+    } else {
+      // 新建：wx 双保险（存在性检查与独占创建）
+      const configDir = path.join(project.root, ".vant", "config");
+      resolveInsideProject(project, ".vant/config", ".vant/config");
+      fs.mkdirSync(configDir, { recursive: true });
+      fs.writeFileSync(file, rendered.content, { encoding: "utf-8", flag: "wx" });
+    }
+  }
 
   return {
     ok: true,
-    action: "created",
+    action: reset ? "reset" : "created",
+    dryRun,
+    existed: exists,
+    added: Object.keys(candidate.bindings),
     file,
     relativeFile: PROJECT_CLI_CONFIG_RELATIVE,
     bytes: rendered.bytes,
     sha256: rendered.sha256,
     projectRoot: project.root,
     bindings: candidate.bindings,
+    ...(backupPath ? { backupPath } : {}),
     vantConfig,
     warnings: rendered.warnings,
   };

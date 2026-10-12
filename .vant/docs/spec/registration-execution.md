@@ -83,7 +83,7 @@ Provider（src/providers/unity/）：把已安装的 @kevlns/u-cli-mod 包装成
 ## 3. 命令用法
 
 ```bash
-v-cli project init  [--project <dir>] [--binding <providerId>=<JSON>]... [--json]
+v-cli project init  [--project <dir>] [--binding <providerId>=<JSON>]... [--reset] [--dry-run] [--json]
 v-cli project inspect [--project <dir>] [--json]
 v-cli capability list [--provider unity] [--json]
 v-cli capability describe <id> [--json]
@@ -138,7 +138,7 @@ v-cli capability run <id> [--project <dir>] [--input <json> | --input-file <path
 约束：
 
 - `v-cli.json` 中出现 `roles`/`workflow`/`project`/`stages` 等 Vant 职责字段 → 明确拒绝（单一真源，不做双份配置）。
-- `project init` 不覆盖已有配置（无 `--force`），**绝不修改** `project.json`（只做只读提示）。
+- `project init` 幂等补全语义（2026-10-12 修订，见 §11.1）：不存在创建；已存在只为缺失段补默认（已有段/字段一律不动）；`--reset` 显式重置（先备份到 `.vant/state/config-backups/`）。**绝不修改** `project.json`（只做只读提示）。
 - `operationId` 必须匹配 `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`、非保留设备名；已存在的 operation 目录一律拒绝覆盖
   （目录创建为非递归 `mkdir`，写入用 `wx` 标志双保险）。
 - 越界与链接防护：绝对路径 / `..` / `.` / 空段 / NUL 一律拒绝；对"最深已存在祖先"取 realpath 核对包含关系；
@@ -215,7 +215,7 @@ v-cli capability run <id> [--project <dir>] [--input <json> | --input-file <path
 
 ### 7.5 project init / inspect（与注册集合一致）
 
-- init：外壳 + 有 `defaultBinding` 的 Provider 默认段；`--binding <providerId>=<JSON>`（可重复）完整替换该段；写入前全量校验（外壳 + 契约 + 强核对），失败拒绝且不写文件；已存在一律拒绝；不触碰 Vant 配置。旧 Unity 专属选项（`--unity-project/--editor-version/--test-mode`）**移除**（不留别名；等价形式为 `--binding unity='{"projectDir":…,"editorVersion":…}'`）。
+- init 三路径（§11.1 修订）：不存在 → created（默认段 + `--binding` 覆盖，wx 独占写入）；已存在 → **幂等补全**（只为缺失段且 Provider 有 defaultBinding 的补默认段，action=reconciled/added；已有段逐字节不动；齐备 → unchanged 退出 0）；`--reset` → 显式重置（旧配置字节级备份到 `.vant/state/config-backups/`，再原子替换）。`--dry-run` 不写文件。写入前全量校验，失败拒绝不落盘；现有配置非法 JSON/含未知 Provider 段 → 拒绝并提示修正或 `--reset`。不触碰 Vant 配置。旧 Unity 专属选项**移除**（等价形式 `--binding unity='{"projectDir":…}'`）。
 - inspect：按当前注册集合逐 Provider 报告 `providerBindings`（bound / missing-binding / invalid，含 dirs/files/warnings/errors）；配置里的未知 Provider 绑定段明确点名；与运行期 `loadProjectConfig` 同一入口。
 
 ### 7.6 验收（对应计划 §5 验收标准）
@@ -475,3 +475,41 @@ P.Cell 侧变更仅 4 个 pipeline .cs 文件（事务式安装，备份在 Libr
 - 登记限制：issue 消息的物理续行在极端形态（续行恰为 issue/工具码形态）下可能被拆分或静默跳过——rawOutput 原文独立留档可回溯，不产生错误验收结论。
 
 修复后：vitest 412 通过 / 5 条件跳过；check / test:package 全绿。
+
+## 11. 修订记录
+
+### 11.1 project init 语义修订：幂等补全 + 显式 --reset（2026-10-12，用户决策）
+
+对计划 §5 原条款"初始化不覆盖已有文件"的**显式修订**（原为阶段 1 硬边界）。动因：多 Provider 升级后，已有工程需自动获得新 Provider 默认段而无需手工编辑；讨论中否决了"记录旧配置→删除→重装"方案（丢失窗口 + "必要项"集合随版本漂移 + 删除步骤不必要），定稿：
+
+- **默认路径幂等补全**：只增不改（缺失段补默认；已有段的键、值与键序不动——v-cli 自产的 canonical 文件补全后逐字节稳定，手编非规范格式会被整体规范化，登记为已声明行为），零丢失风险，与全仓 fail-closed 风格一致；
+- **`--reset` 显式逃生门**：旧配置字节级备份（.vant/state/config-backups/，不入 Git）→ tmp+rename 原子替换；默认路径永远不删除内容；
+- **`--dry-run`** 无副作用预演（含 reset 路径：不写配置、不建备份）。
+
+原"已存在一律拒绝"行为取消（refused 保留给：非法 JSON 无法安全补全、未知 Provider 段、未知 `--binding` 目标、生成/补全结果校验失败）。安全意图由"默认路径永不删除/改写已有内容"继承。计划 §5 条款已同步修订标注。
+
+### 11.2 一审修复（2026-10-12，已直接合入正文）
+
+一审结论：修复后合入（P0×1 / P1×4 / P2×2 / P3×7，全部处置）：
+
+- P0-1 `--reset --dry-run` 备份块移入 `!dryRun` 门控——预演不再写备份目录/文件；补"备份目录未创建"断言。
+- P1-1 `--binding` 指向已有段 → **拒绝并指路 --reset**（幂等补全不改已有段；显式意图不可静默丢弃，回归旧语义的拒绝姿态而非静默 no-op）。
+- P1-2 现有配置 `schemaVersion ≠ 1` → 拒绝（不做降级改写；与运行期 fail-closed 一致，防未来版本前向兼容事故）。
+- P1-3 "逐字节不动"措辞降准为"键、值与键序不动（canonical 文件逐字节稳定；手编格式规范化）"+ 非规范格式行为测试钉死。
+- P1-4 五处旧"已存在拒绝"措辞清除（project.ts 帮助/whenToUse、cli.ts、README×2、SKILL）。
+- P2-1 unchanged 前同样跑绑定校验——齐备但含未知 Provider 段/无效绑定时明确拒绝，不静默报"齐备"；注释同步修正。
+- P2-2 补六项契约测试（dry-run reset 零备份、--binding 已有段拒绝、schemaVersion 守卫、齐备+ghost 拒绝、非规范格式行为、unchanged.dryRun）。
+- P3：reset-用于不存在文件的文案区分（等价创建）；unchanged.dryRun 如实；dry-run 下不打印"已备份"行；备份文件名加 pid 后缀防同毫秒互覆；一次性脚本残留清除。TOCTOU 并发写（旧代码同在）与 tmp 残留（崩溃窗口）登记为已声明限制。
+
+修复后：vitest 421 通过 / 5 条件跳过；check / test:package 全绿。
+
+### 11.3 二审修复（2026-10-12，已直接合入正文）
+
+二审结论：修复后合入（P0×0 / P1×3 / P3×2，全部处置）：
+
+- P1-A dry-run reset 文本误报"原不存在"：结果对象新增 `existed` 字段（显式事实，不再从 backupPath 反推），文本按 `action × existed` 组合选文案；dry-run 文案时态顺平（"将创建/将补全/将重置"）；补 existed/backupPath 组合与符号链接回归测试。
+- P1-B `config.ts` 文件头旧"绝不覆盖"注释清除（清单外第六处，同步为幂等补全语义）。
+- P1-C init 已存在路径补配置文件级符号链接检查（对齐 loadProjectConfig 的 fail-closed：文件为链接/联接时拒绝）——消解"运行期 fail-closed、init 期跟随"的姿态不一致。
+- P3：dry-run 文案前缀简化（"[dry-run] 将执行:" → "[dry-run]"）；`&& !result.dryRun` 纵深防御保留。
+
+修复后：vitest 423 通过 / 5 条件跳过；check / test:package 全绿。
