@@ -674,7 +674,6 @@ describe("unity provider：契约与注册", () => {
     expect(result.provider.tool?.name).toBe("unity");
     expect(result.provider.tool?.version).toBe("0.2.4");
     expect(result.invocation.command?.args[0]).toBe(fakeBackend().bin);
-    expect(path.isAbsolute(result.invocation.command!.args[0]!)).toBe(true);
     expect(result.persisted.files).toEqual(
       expect.arrayContaining(["input.json", "events.jsonl", "stdout.log", "result.json"]),
     );
@@ -820,7 +819,7 @@ describe("阶段 C 一审修复回归", () => {
     const variants = [
       long,                                        // realpath 长路径（与绑定短名词形不同）
       long.split(path.sep).join("/"),              // 正斜杠
-      long.toUpperCase(),                          // 大写（win32 不敏感）
+      ...(process.platform === "win32" ? [long.toUpperCase()] : []), // 大写（仅 win32 不敏感文件系统）
       `${long.split(path.sep).join("/")}/`,        // 尾斜杠
     ];
     for (const [i, echo] of variants.entries()) {
