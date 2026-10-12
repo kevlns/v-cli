@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 const CLI = resolve(__dirname, "../dist/cli.mjs");
 const FIXTURE_ROOT = resolve(__dirname, "fixtures", "installed");
 const BROKEN_ROOT = resolve(__dirname, "fixtures", "broken");
+const repoRoot = resolve(__dirname, "..");
 const homes: string[] = [];
 
 function newHome(): string {
@@ -91,7 +92,13 @@ describe("CLI 集成", () => {
     const unity = data.officialPlugins.find((o: { name: string }) => o.name === "unity");
     expect(unity).toBeTruthy();
     expect(unity.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
-    if (process.platform === "win32") expect(unity.version).toBe("0.2.4");
+    if (process.platform === "win32") {
+      // 版本与实际解析到的包一致（开发期为本地联接的 u-cli-mod；干净安装为 lock 钉扎版本）
+      const resolved = (JSON.parse(
+        readFileSync(join(repoRoot, "node_modules", "@kevlns", "u-cli-mod", "package.json"), "utf-8"),
+      ) as { version: string }).version;
+      expect(unity.version).toBe(resolved);
+    }
   });
 
   it("plugin list 包含内置命令与官方插件行（官方依赖已安装）", () => {
@@ -105,7 +112,13 @@ describe("CLI 集成", () => {
     expect(xl.version).toBe("2.0.1");
     const unity = official.find((r: { name: string }) => r.name === "unity");
     expect(unity.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
-    if (process.platform === "win32") expect(unity.version).toBe("0.2.4");
+    if (process.platform === "win32") {
+      // 版本与实际解析到的包一致（开发期为本地联接的 u-cli-mod；干净安装为 lock 钉扎版本）
+      const resolved = (JSON.parse(
+        readFileSync(join(repoRoot, "node_modules", "@kevlns", "u-cli-mod", "package.json"), "utf-8"),
+      ) as { version: string }).version;
+      expect(unity.version).toBe(resolved);
+    }
   });
 
   it("plugin list --json 在 fixture 下官方插件可用（win32 主机含 unity）", () => {

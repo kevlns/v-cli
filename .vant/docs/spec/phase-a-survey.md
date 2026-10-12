@@ -231,7 +231,7 @@ HTTP 层：
 
 | 编号 | 缺口 | 影响阶段 | 状态 |
 | --- | --- | --- | --- |
-| GAP-U1 | Unity Pipeline **命令层**无任务身份：无 runId、状态/取消均"最近一次"语义、新任务顶替旧任务、编译槽位被引擎级事件覆写、状态文件跨会话残留。HTTP 层有内存态 job 协议但经 CLI 不可达且不跨 domain reload（§6） | D（阻塞异步闭环验收） | 已实锤；阶段 D 先评估 job 协议复用（§6 候选路线），u-cli-mod/pipeline 侧变更独立提交 |
+| GAP-U1 | Unity Pipeline **命令层**无任务身份：无 runId、状态/取消均"最近一次"语义、新任务顶替旧任务、编译槽位被引擎级事件覆写、状态文件跨会话残留。HTTP 层有内存态 job 协议但经 CLI 不可达且不跨 domain reload（§6） | D（阻塞异步闭环验收） | **已闭合**（2026-10-12 阶段 D：纯命令层 runId 方案落地，u-cli-mod patchVersion 3 + v-cli 三个句柄关联能力，真实验收通过） |
 | GAP-U2 | v-cli unity provider 未核对信封回显 `data.target.projectPath` 与绑定工程的一致性 | C（小改进） | **已闭合**（2026-10-10 阶段 C：invoke() 回显核对，不一致即 unity-target-mismatch 不采信） |
 | GAP-F1 | P.Cell 无真实 Figma staging 样本与配置；真实正例未完成 | E（验收降级为隔离样本） | 登记；真实正例后补 |
 | GAP-V1 | `unity.compile-status` 与 `unity.test-status` 描述虽写明"读取最近一次"，但未警示**归属不可证明**（不证明属于哪次触发、编译槽位会被引擎级事件覆写、状态跨会话残留） | B（描述/文档修订） | **已闭合**（2026-10-10 阶段 B：两能力描述补观察语义警示） |

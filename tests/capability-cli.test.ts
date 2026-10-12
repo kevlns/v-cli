@@ -145,7 +145,7 @@ describe("CLI：project init / inspect", () => {
     expect(unityBinding.dirs.projectDir).toBe(join(root, "Client"));
     expect(payload.state.exists).toBe(false);
     const unity = payload.providers.find((p) => p.id === "unity")!;
-    expect(unity.capabilityCount).toBe(7);
+    expect(unity.capabilityCount).toBe(10);
     expect(unity.state).toBe(IS_WIN ? "available" : "platform-mismatch");
   });
 
@@ -158,7 +158,7 @@ describe("CLI：project init / inspect", () => {
 });
 
 describe("CLI：capability list / describe（不执行工具）", () => {
-  it("list --json 列 provider 与 7 个 unity 能力", () => {
+  it("list --json 列 provider 与 10 个 unity 能力（7 基础 + 3 句柄关联）", () => {
     const r = run(["capability", "list", "--json"]);
     expect(r.status).toBe(0);
     const payload = r.json as {
@@ -168,10 +168,13 @@ describe("CLI：capability list / describe（不执行工具）", () => {
     expect(payload.providers.map((p) => p.id)).toEqual(["unity"]);
     expect(payload.capabilities.map((c) => c.id)).toEqual([
       "unity.compile",
+      "unity.compile-query",
       "unity.compile-status",
       "unity.doctor",
       "unity.editor-status",
       "unity.test-cancel",
+      "unity.test-cancel-run",
+      "unity.test-query",
       "unity.test-start",
       "unity.test-status",
     ]);
@@ -348,7 +351,7 @@ describe("SDK：dist/sdk.mjs 导入与包出口", () => {
     expect(typeof sdk.loadProjectConfig).toBe("function");
     expect(typeof sdk.OperationStore).toBe("function");
     const registry = sdk.createDefaultRegistry();
-    expect(registry.list()).toHaveLength(7);
+    expect(registry.list()).toHaveLength(10);
     const described = registry.describe("unity.doctor");
     expect(described.provider.id).toBe("unity");
   });

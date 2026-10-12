@@ -21,7 +21,7 @@
 - capability run 的语义：工程根用 `--project` 显式锚定；输入由配置绑定（不接受 projectPath 等覆盖）；
   **执行状态与验收状态分离**——进程退出码 0 不等于业务通过，退出码 0 只在验收 passed 时出现（1=执行/验收失败，2=未执行，3=已执行但验收 not-run 需按 followUp 轮询，4=已确认取消，5=结果未知）；
   每次执行在 `<工程根>/.vant/state/operations/<operationId>/` 保存输入摘要、事件与结果证据（本地记录，不是任务队列；`--no-persist` 可关闭）；
-  **lifecycle 是任务级六态**（accepted/running/completed/failed/cancelled/unknown；unknown=不可解释/不可知，绝不升级）；异步触发在结果 `handle` 中返回可序列化执行句柄——查询/取消类能力以 `input.handle` 传入并用内核校验（落盘证据回读，失败明确拒绝不回退最近任务）；Unity 后端暂无任务身份（句柄 backendTaskId=null，状态能力为观察语义）
+  **lifecycle 是任务级六态**（accepted/running/completed/failed/cancelled/unknown；unknown=不可解释/不可知，绝不升级）；异步触发在结果 `handle` 中返回可序列化执行句柄——查询/取消类能力以 `input.handle` 传入并用内核校验（落盘证据回读，失败明确拒绝不回退最近任务）；Unity 后端 patchVersion 3 起提供 runId：`unity.compile`/`unity.test-start` 句柄的 backendTaskId=runId，用 `unity.compile-query`/`unity.test-query`/`unity.test-cancel-run` 按句柄关联查询/定向取消（关联失效=后端 unknown_run，明确 failed 不采信其他任务记录）
 - 首个 provider 是 unity（基于已安装 `@kevlns/u-cli-mod`，受控 argv 调用）：先 `v-cli capability describe <id> --json` 读契约；
   exec 类能力默认自动跑一次 doctor 核对就绪判据（不得跳过）；`unity.compile`/`unity.test-start` 是异步触发，只报告 accepted，必须轮询 `unity.compile-status`/`unity.test-status`；测试 completed、有效非零报告且全部用例通过才 passed
 - **首调规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，
@@ -68,7 +68,7 @@
 
 ## @kevlns/u-cli-mod — 命令 `v-cli unity …`
 
-**版本**：0.2.4
+**版本**：0.3.0
 **描述**：Pin a Unity project to its exact editor version route, download the verified Unity CLI and install the adapted com.unity.pipeline package for Unity 2022 (Windows-first, non-official Unity tooling).
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 

@@ -563,15 +563,18 @@ describe("unity provider：test-cancel（取消必须确认）", () => {
 });
 
 describe("unity provider：契约与注册", () => {
-  it("provider 描述包含全部七个能力与声明的副作用/资源/重试", async () => {
+  it("provider 描述包含全部十个能力（七个基础 + 三个句柄关联）与声明的副作用/资源/重试", async () => {
     const { registry } = registryFor(() => ({ exitCode: 0, stdout: READY_DOCTOR }));
     const ids = registry.list().map((r) => r.id);
     expect(ids).toEqual([
       "unity.compile",
+      "unity.compile-query",
       "unity.compile-status",
       "unity.doctor",
       "unity.editor-status",
       "unity.test-cancel",
+      "unity.test-cancel-run",
+      "unity.test-query",
       "unity.test-start",
       "unity.test-status",
     ]);
@@ -830,5 +833,230 @@ describe("阶段 C 一审修复回归", () => {
     const { registry: bad } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: env("C:/other/project", JSON.stringify({ status: "ready" })) })));
     const failed = await run(bad, p, "unity.editor-status");
     expect(failed.execution.error?.code).toBe("unity-target-mismatch");
+  });
+});
+
+describe("阶段 D：句柄关联能力（patchVersion 3）", () => {
+  const envelope = (dir: string, resultJson: string) =>
+    `${JSON.stringify({ success: true, data: { success: true, result: resultJson, target: { host: "127.0.0.1", port: 7800, projectPath: dir } } })}\n`;
+  const runIdEnvelope = (dir: string, runId: string) =>
+    envelope(dir, JSON.stringify({ Result: "running", RunId: runId, StatusPath: "Temp/pipeline_test_status.json" }));
+
+  it("test-start 种子真实化：响应 RunId → 句柄 backendTaskId", async () => {
+    const p = project();
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: runIdEnvelope(p.clientDir, "run-abc-123") })));
+    const result = await run(registry, p, "unity.test-start", { mode: "EditMode" });
+    expect(result.handle?.backendTaskId).toBe("run-abc-123");
+  });
+
+  it("compile 种子真实化：响应 runId → 句柄 backendTaskId", async () => {
+    const p = project();
+    const { registry } = registryFor(readyHandler(() => ({ exitCode: 0, stdout: envelope(p.clientDir, JSON.stringify({ status: "compiling", runId: "rc-001" })) })));
+    const result = await run(registry, p, "unity.compile");
+    expect(result.handle?.backendTaskId).toBe("rc-001");
+  });
+
+  it("test-query 全链路：真实触发落盘 → 按 handle 查询到同一运行的 completed 报告（passed）", async () => {
+    const p = project();
+    const runId = "run-full-1";
+    const report = JSON.stringify({ status: "completed", runId, duration: 0.5, summary: { total: 3, passed: 3, failed: 0, skipped: 0, inconclusive: 0 }, results: [] });
+    let queryCount = 0;
+    const { registry } = registryFor((call) => {
+      if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+      const args = call.args.slice(1);
+      if (args.includes("run_tests")) return { exitCode: 0, stdout: runIdEnvelope(p.clientDir, runId) };
+      queryCount += 1;
+      return { exitCode: 0, stdout: envelope(p.clientDir, report) };
+    });
+    const trigger = await runCapability(registry, {
+      capabilityId: "unity.test-start", projectRoot: p.root, input: { mode: "EditMode" }, operationId: "trig-d-1", persist: true,
+    });
+    expect(trigger.handle?.backendTaskId).toBe(runId);
+
+    const q = await runCapability(registry, {
+      capabilityId: "unity.test-query", projectRoot: p.root, input: { handle: trigger.handle }, operationId: "query-d-1", persist: true,
+    });
+    expect(queryCount).toBeGreaterThan(0);
+    expect(q.execution).toMatchObject({ status: "succeeded", lifecycle: "completed" });
+    expect(q.acceptance.status).toBe("passed");
+    expect(q.acceptance.reason).toContain(runId);
+    expect(q.output).toMatchObject({ runId, correlation: "verified", originOperationId: "trig-d-1", status: "completed" });
+    expect((q.output as { summary: { total: number } }).summary.total).toBe(3);
+  });
+
+  it("test-query 关联失效：后端 unknown_run → acceptance failed（绝不采信其他运行报告）", async () => {
+    const p = project();
+    const runId = "run-superseded";
+    const { registry } = registryFor((call) => {
+      if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+      const args = call.args.slice(1);
+      if (args.includes("run_tests")) return { exitCode: 0, stdout: runIdEnvelope(p.clientDir, runId) };
+      return { exitCode: 0, stdout: envelope(p.clientDir, JSON.stringify({ status: "unknown_run", requestedRunId: runId })) };
+    });
+    const trigger = await runCapability(registry, {
+      capabilityId: "unity.test-start", projectRoot: p.root, input: { mode: "EditMode" }, operationId: "trig-d-2", persist: true,
+    });
+    const q = await runCapability(registry, {
+      capabilityId: "unity.test-query", projectRoot: p.root, input: { handle: trigger.handle }, operationId: "query-d-2", persist: true,
+    });
+    expect(q.execution).toMatchObject({ status: "succeeded", lifecycle: "unknown" });
+    expect(q.acceptance.status).toBe("failed");
+    expect(q.acceptance.reason).toContain("关联失效");
+    expect(q.output).toMatchObject({ status: "unknown_run" });
+  });
+
+  it("test-query：句柄校验失败在执行前拒绝（前置条件 violated，零后端调用）", async () => {
+    const p = project();
+    let execCalls = 0;
+    const { registry } = registryFor((call) => {
+      if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+      execCalls += 1;
+      return { exitCode: 0, stdout: envelope(p.clientDir, "{}") };
+    });
+    const q = await run(registry, p, "unity.test-query", { handle: { schemaVersion: 1, bogus: true } });
+    expect(execCalls).toBe(0);
+    expect(q.preconditions.find((x) => x.id === "unity.handle-valid")?.status).toBe("violated");
+    expect(q.execution.error?.category).toBe("precondition");
+  });
+
+  it("test-cancel-run：确认取消 → lifecycle=cancelled + passed；unknown_run → 零副作用 failed", async () => {
+    const p = project();
+    const runId = "run-cancel-1";
+    {
+      const { registry } = registryFor((call) => {
+        if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+        const args = call.args.slice(1);
+        if (args.includes("run_tests")) return { exitCode: 0, stdout: runIdEnvelope(p.clientDir, runId) };
+        return { exitCode: 0, stdout: envelope(p.clientDir, JSON.stringify({ status: "cancelled", runId })) };
+      });
+      const trigger = await runCapability(registry, {
+        capabilityId: "unity.test-start", projectRoot: p.root, input: { mode: "EditMode" }, operationId: "trig-d-3", persist: true,
+      });
+      const c = await runCapability(registry, {
+        capabilityId: "unity.test-cancel-run", projectRoot: p.root, input: { handle: trigger.handle }, operationId: "cancel-d-3", persist: true,
+      });
+      expect(c.execution).toMatchObject({ status: "succeeded", lifecycle: "cancelled" });
+      expect(c.acceptance.status).toBe("passed");
+      expect(c.output).toMatchObject({ runId, cancelled: true, originOperationId: "trig-d-3" });
+    }
+    {
+      const { registry } = registryFor((call) => {
+        if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+        const args = call.args.slice(1);
+        if (args.includes("run_tests")) return { exitCode: 0, stdout: runIdEnvelope(p.clientDir, runId) };
+        return { exitCode: 0, stdout: envelope(p.clientDir, JSON.stringify({ status: "unknown_run", requestedRunId: runId })) };
+      });
+      const trigger = await runCapability(registry, {
+        capabilityId: "unity.test-start", projectRoot: p.root, input: { mode: "EditMode" }, operationId: "trig-d-4", persist: true,
+      });
+      const c = await runCapability(registry, {
+        capabilityId: "unity.test-cancel-run", projectRoot: p.root, input: { handle: trigger.handle }, operationId: "cancel-d-4", persist: true,
+      });
+      expect(c.execution.lifecycle).toBe("unknown");
+      expect(c.acceptance.status).toBe("failed");
+      expect(c.acceptance.reason).toContain("零副作用");
+      expect(c.output).toMatchObject({ cancelled: false, reason: "unknown_run" });
+    }
+  });
+
+  it("compile-query：无错误终态 → passed（runId 关联）", async () => {
+    const p = project();
+    const runId = "rc-d-1";
+    const { registry } = registryFor((call) => {
+      if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+      const args = call.args.slice(1);
+      if (args.includes("recompile") && !args.includes("recompile_status")) {
+        return { exitCode: 0, stdout: envelope(p.clientDir, JSON.stringify({ status: "compiling", runId })) };
+      }
+      return { exitCode: 0, stdout: envelope(p.clientDir, JSON.stringify({ status: "completed", runId, failed: false, errors: [] })) };
+    });
+    const trigger = await runCapability(registry, {
+      capabilityId: "unity.compile", projectRoot: p.root, input: {}, operationId: "trig-d-5", persist: true,
+    });
+    expect(trigger.handle?.backendTaskId).toBe(runId);
+    const q = await runCapability(registry, {
+      capabilityId: "unity.compile-query", projectRoot: p.root, input: { handle: trigger.handle }, operationId: "query-d-5", persist: true,
+    });
+    expect(q.execution).toMatchObject({ status: "succeeded", lifecycle: "completed" });
+    expect(q.acceptance.status).toBe("passed");
+    expect(q.output).toMatchObject({ runId, status: "completed", correlation: "verified" });
+  });
+
+  it("compile-query 关联失效：unknown_run（引擎自发编译顶替槽位）→ failed", async () => {
+    const p = project();
+    const runId = "rc-d-2";
+    const { registry } = registryFor((call) => {
+      if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+      const args = call.args.slice(1);
+      if (args.includes("recompile") && !args.includes("recompile_status")) {
+        return { exitCode: 0, stdout: envelope(p.clientDir, JSON.stringify({ status: "compiling", runId })) };
+      }
+      return { exitCode: 0, stdout: envelope(p.clientDir, JSON.stringify({ status: "unknown_run", requestedRunId: runId })) };
+    });
+    const trigger = await runCapability(registry, {
+      capabilityId: "unity.compile", projectRoot: p.root, input: {}, operationId: "trig-d-6", persist: true,
+    });
+    const q = await runCapability(registry, {
+      capabilityId: "unity.compile-query", projectRoot: p.root, input: { handle: trigger.handle }, operationId: "query-d-6", persist: true,
+    });
+    expect(q.execution).toMatchObject({ status: "succeeded", lifecycle: "unknown" });
+    expect(q.acceptance.status).toBe("failed");
+    expect(q.acceptance.reason).toContain("关联失效");
+  });
+});
+
+describe("阶段 D 一审修复回归", () => {
+  const envelope2 = (dir: string, resultJson: string) =>
+    `${JSON.stringify({ success: true, data: { success: true, result: resultJson, target: { host: "127.0.0.1", port: 7800, projectPath: dir } } })}\n`;
+
+  it("P1-1：backendTaskId=null 的句柄被拒绝（unity-handle-no-backend-id），绝不退化为全局查询/取消", async () => {
+    const p = project();
+    let execCalls = 0;
+    const { registry } = registryFor((call) => {
+      if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+      execCalls += 1;
+      return { exitCode: 0, stdout: envelope2(p.clientDir, "{}") };
+    });
+    // 构造 null-id 句柄：触发时响应不带 RunId（形状漂移场景）
+    const trigger = await runCapability(registry, {
+      capabilityId: "unity.test-start", projectRoot: p.root, input: { mode: "EditMode" }, operationId: "trig-null-id", persist: true,
+    });
+    expect(trigger.handle?.backendTaskId).toBeNull();
+    const q = await runCapability(registry, {
+      capabilityId: "unity.test-query", projectRoot: p.root, input: { handle: trigger.handle }, operationId: "query-null-id", persist: true,
+    });
+    expect(execCalls).toBe(1); // 仅触发那次 exec；查询零后端调用
+    // P3-2：前置条件即拒绝（violated），execute 守卫为纵深
+    expect(q.preconditions.find((x) => x.id === "unity.handle-valid")?.status).toBe("violated");
+    expect(q.execution.error?.category).toBe("precondition");
+    expect(q.acceptance.status).toBe("not-run");
+    const c = await runCapability(registry, {
+      capabilityId: "unity.test-cancel-run", projectRoot: p.root, input: { handle: trigger.handle }, operationId: "cancel-null-id", persist: true,
+    });
+    expect(c.preconditions.find((x) => x.id === "unity.handle-valid")?.status).toBe("violated");
+
+    // compile-query 同样拒绝 null-id 句柄（编译触发响应缺 runId 的形状漂移）
+    const { registry: r2 } = registryFor((call) => {
+      if (call.args[1] === "doctor") return { exitCode: 0, stdout: READY_DOCTOR };
+      return { exitCode: 0, stdout: envelope2(p.clientDir, JSON.stringify({ status: "compiling" })) };
+    });
+    const trigger2 = await runCapability(r2, {
+      capabilityId: "unity.compile", projectRoot: p.root, input: {}, operationId: "trig-null-id-c", persist: true,
+    });
+    expect(trigger2.handle?.backendTaskId).toBeNull();
+    const q2 = await runCapability(r2, {
+      capabilityId: "unity.compile-query", projectRoot: p.root, input: { handle: trigger2.handle }, operationId: "query-null-id-c", persist: true,
+    });
+    expect(q2.preconditions.find((x) => x.id === "unity.handle-valid")?.status).toBe("violated");
+  });
+
+  it("P3-3：三个句柄能力的 handle 为必填（schema 层拒绝）", () => {
+    // 经 registry describe 断言 required
+    const registry = new CapabilityRegistry();
+    registry.registerProvider(createUnityProvider({ executor: new FakeExecutor(() => ({ exitCode: 0, stdout: "" })), discoverBackend: () => fakeBackend() }));
+    for (const id of ["unity.compile-query", "unity.test-query", "unity.test-cancel-run"]) {
+      const d = registry.describe(id)!;
+      expect((d.inputSchema as { required?: string[] }).required, id).toEqual(["handle"]);
+    }
   });
 });

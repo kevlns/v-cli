@@ -114,6 +114,16 @@ export function interpretToolOutput(stdout: string): ToolOutput {
   };
 }
 
+/** 从响应载荷提取后端 runId（run_tests 响应为 PascalCase "RunId"；recompile 响应为 camelCase "runId"） */
+export function extractRunId(payload: unknown): { runId: string | null; source: string | null } {
+  if (!isPlainObject(payload)) return { runId: null, source: null };
+  for (const key of ["RunId", "runId"] as const) {
+    const value = payload[key];
+    if (typeof value === "string" && value.length > 0) return { runId: value, source: `result.${key}` };
+  }
+  return { runId: null, source: null };
+}
+
 /** 从规范化载荷里读取候选状态字段（只认文档/证据出现过的字段名） */
 export function extractStatus(payload: unknown): { status: string | null; source: string | null } {
   if (!isPlainObject(payload)) return { status: null, source: null };

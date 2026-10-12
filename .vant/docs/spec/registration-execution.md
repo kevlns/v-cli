@@ -107,6 +107,9 @@ v-cli capability run <id> [--project <dir>] [--input <json> | --input-file <path
 | `unity.test-start` | 异步触发（固定 `--async_tests`） | 一律 `not-run`（`pending`），轮询 `unity.test-status` |
 | `unity.test-status` | 状态 | `completed` **且**非零有效报告中全部用例通过 → passed；有失败/缺失败数/缺报告/未知取值/缺字段 → failed；运行中 → not-run(pending)；`idle` → not-run；`cancelled` → failed |
 | `unity.test-cancel` | 请求+确认 | 响应显式确认或 `test_status` 探测为 `cancelled` → passed；仍运行 → not-run(pending)；其余 → not-run（**未确认不得报告已取消**） |
+| `unity.compile-query` | 句柄关联查询（阶段 D） | 句柄校验+`recompile_status --run_id`；终态无错误 → passed；`unknown_run` → failed（关联失效，不采信其他编译）；运行中 → not-run(pending) |
+| `unity.test-query` | 句柄关联查询（阶段 D） | 句柄校验+`test_status --run_id`；completed 且报告/计数/全过判据同观察能力 → passed；`unknown_run` → failed（关联失效）；running → not-run(pending)；cancelled → failed |
+| `unity.test-cancel-run` | 句柄定向取消（阶段 D） | `cancel_tests --run_id`；cancelled → lifecycle=cancelled+passed；`unknown_run`/`no_active_run` → failed（零副作用）；backendTaskId=null 句柄 → 拒绝执行 |
 
 - 目标工程由配置绑定：`bindings.unity.projectDir`（相对工程根；`"."` 表示工程根自身）。
   能力输入 **不含** `projectPath` 一类字段，`additionalProperties: false` 使其直接失败；argv 由 v-cli 构造，无 shell 拼接。
@@ -349,3 +352,78 @@ unity `invoke()` 对 exec 信封回显的 `data.target.projectPath` 与绑定目
 - P3：删除一次性修复脚本残留；unusable/tampered 分流改结构化标记（missingHandleField 布尔，不再匹配错误消息文本）+ 混合场景测试；路径词形归一收敛为 core 单一实现 `comparePathForm`（paths.ts 导出，handle.ts 与 unity 复用）；§8.5 登记已声明限制（证据非签名/字段静默放行边界/命名空间前缀 fail-closed/归一平台边界）；样本 Provider 头注释更新；§3.1 compile 行 pending 措辞精确化。
 
 修复后：`npx tsc --noEmit` 0 错误；vitest 382 通过 / 5 条件跳过；`npm run check` 与 `npm run test:package` 全绿。
+
+## 9. 阶段 D：Unity 后端协议与适配（已实现）
+
+> 依据：`.vant/docs/spec/phase-a-identity-matrix.md` §3（runId 协议要求）。2026-10-12 实施完成。
+
+### 9.1 后端协议（u-cli-mod patchVersion 3，独立仓库提交）
+
+- **C# 补丁**（`u-cli-mod/src/runIdPatch.ts`，锚点式确定性补丁，四文件）：
+  - `run_tests --async_tests` 分配 runId（GUID "N"），持久化于请求文件并在响应回显（`TestExecutionResponse.RunId`）；
+    该运行的所有状态载荷（completed/error/cancelled/空跑）携带 runId；domain reload 后经请求文件恢复。
+  - `test_status --run_id <id>`：关联读——请求文件 id 匹配→running；状态文件 id 匹配→其内容；
+    否则 `{"status":"unknown_run"}`（绝不回退最近一次、绝不返回其他运行的报告）。
+  - `cancel_tests --run_id <id>`：定向取消——不匹配/无活动运行返回 `unknown_run`/`no_active_run` 且**零副作用**
+    （不覆写任何状态文件）；匹配才取消，cancelled 载荷带 runId。
+  - `recompile` 分配 runId 贯穿引擎事件到终态；引擎自发编译写 runId=null；`recompile_status --run_id` 同关联读语义。
+- 路由 patchVersion 2→3（两条路由），expected-tree 再生成为确定性脚本 `scripts/regen-expected-tree.mjs`（幂等，往返校验字节精确）。
+- u-cli-mod 0.2.4→0.3.0；AGENTS.md 使用规范第 9 条记录任务身份语义。
+
+### 9.2 v-cli 适配
+
+- 触发种子真实化：`unity.compile`/`unity.test-start` 句柄 `backendTaskId` = 响应 runId（`protocol.extractRunId` 兼容 Pascal/camel）。
+- 新增三个句柄关联能力（前置条件含 `unity.handle-valid` 内核校验闸门，执行前拒绝零后端调用）：
+  - `unity.compile-query`：`recompile_status --run_id`；unknown_run→关联失效 failed（含引擎自发编译顶替）。
+  - `unity.test-query`：`test_status --run_id`；completed 按与观察能力同一严格判据验收（报告+计数+全过）。
+  - `unity.test-cancel-run`：`cancel_tests --run_id`；cancelled→lifecycle=cancelled+passed；unknown_run/no_active_run→零副作用 failed。
+- 输出携带 `runId / correlation:"verified" / originOperationId`；证据含内核身份核对项与后端协议字段。
+
+### 9.3 真实验收（P.Client，Editor 会话内，操作证据入 .vant/state/operations）
+
+| 场景 | 结果 |
+| --- | --- |
+| 句柄追踪同一份非零报告 | test-start→handle→test-query：completed 3/3 passed，runId 关联 verified（d-e2e-start-1c/query-1） |
+| 同工程连续任务不串报告 | 第二次启动后旧句柄查询→unknown_run 关联失效 failed，未返回新运行报告（d-e2e-start-3/query-old） |
+| 旧句柄不能取消新任务 | 并发真实验证：start-b 运行中用 start-a 句柄取消 → unknown_run 零副作用，b 终态 completed 3/3 passed 未被污染（d-e2e-race-1-a/-b/-cancel/-query）；已结束场景 no_active_run 零副作用（d-e2e-cancel-old） |
+| 定向取消正例 | v-cli 层 test-cancel-run 匹配句柄 → cancelled+passed（d-e2e-cancel-pos-4-start/-cancel）；u-cli 层手工验证一致 |
+| 编译按句柄追踪 | compile→handle→compile-query：up_to_date passed，runId 关联（d-e2e-compile-1/cq-1，一审批次；修复版重装后运行时复验 d-e2e-compile-2/cq-2 同结论） |
+| 编辑器重载存活 | 安装 patch→recompile→domain reload 后新协议生效；旧格式（无 runId）终态按 id 查询返回 unknown_run（探测 2/3，2026-10-12） |
+
+P.Cell 侧变更仅 4 个 pipeline .cs 文件（事务式安装，备份在 Library/editor-pipeline-cli/backups）；其余 git 差异（AgentHome/DesignDocs/ArtForge）为用户并行工作，不属于本轮。v-cli 开发期经 node_modules 联接指向本地 u-cli-mod 0.3.0（未改 package.json/lock）。
+
+`npm run check` 与 `npm run test:package` 全绿（v-cli 390 通过；u-cli-mod 156 通过）。
+
+### 9.4 已声明限制（阶段 D 一审后登记）
+
+- **发布顺序依赖**：u-cli-mod 0.3.0 需先发布 npm，v-cli 再升依赖（当前 package.json 仍钉 0.2.4；开发期经 node_modules 联接指向本地 0.3.0，未改 lock）。干净安装的 v-cli（配 0.2.4）在 patch 3 工程上会被 doctor 前置条件正确阻断（outdated），三个新能力不误执行。过渡期注意：已提交的 AGENTS.md 生成自联接 0.3.0 环境——干净 clone（node_modules 为 0.2.4）上 `npm run check` 的 check:agents 环节会因版本差异失败，属预期；发布 0.3.0 并升级依赖后即消失。
+- **backendTaskId=null 的句柄**（阶段 C 时代产物或响应形状漂移）：三个句柄关联能力一律拒绝（`unity-handle-no-backend-id`），绝不退化为无 `--run_id` 的全局语义。
+- **recompile 连发**：单槽固有——第二次 recompile 覆盖 pending id 后，前一编译批次的引擎事件终态会记在后发 id 名下（前一 id 按关联查询得到 unknown_run，正确拒绝）；后发句柄可能收到含前批错误的 completed。up_to_date 终态即清 pending，后续引擎自发编译记 runId=null。
+- **定向取消成功响应**（cancel_tests --run_id 匹配）的响应对象不带 runId（状态文件带）；v-cli 以句柄侧 runId 补偿。
+- **终态写入与请求文件删除之间的瞬态窗口**内按 id 查询返回 running（同一 id、下一轮即终态）；legacy 无参 cancel_tests 保持原覆写行为（含把已完成报告覆写为 cancelled）——两个 legacy 行为在 u-cli-mod AGENTS.md 第 9 条披露。
+- P.Cell 侧 patch 3 安装产生的 4 个 .cs 变更留在工作区（备份在 Library），由工程负责人决定提交时机。
+
+### 9.5 一审修复（2026-10-12，已直接合入正文）
+
+一审结论：修复后合入（P0×0 / P1×3 / P2×3 / P3×7，全部处置）：
+
+- P1-1 三个句柄关联能力对 `backendTaskId=null` 的句柄一律拒绝（`unity-handle-no-backend-id`），绝不退化为无 `--run_id` 的全局语义（防定向取消误伤与伪 verified）；含形状漂移回归测试。
+- P1-2 `RecompileCommand` up_to_date 终态清空 `s_PendingRunId`——后续引擎自发编译不再归属到陈旧句柄（补丁源修复→expected-tree 再生成→P.Cell 重装→编辑器重载生效）。
+- P1-3 测试管线三处 error 终态载荷补 `runId`（未完成/写结果异常/reload 重挂失败），句柄对自身错误终态不再失明。
+- P2-1 补真实验收证据：定向取消正例（d-e2e-cancel-pos-4：cancelled+passed）；并发旧句柄取消（d-e2e-race-1：运行中新任务下旧句柄取消→unknown_run 零副作用，新任务 completed 3/3 未被污染）。
+- P2-2 版本断言改为与实际解析包对齐（不预设数字；干净安装与本地联接都过且能抓漂移）；发布顺序依赖登记 §9.4。
+- P2-3/P3：连发归属与 legacy 行为在 u-cli-mod AGENTS 第 9 条披露；test-cancel-run 的 capabilityId 文案修正 + handoff 分支补齐；三个新能力 handle 必填（schema required）；§3.1 主表补三行；§9.3 表证据引用与第 6 行表述修正；协议不对称/瞬态窗口登记 §9.4。
+
+修复后：u-cli-mod 156 通过；v-cli 392 通过；两仓 check / test:package 全绿。
+
+### 9.6 二审修复（2026-10-12，已直接合入正文）
+
+二审结论：可合入（P0×0 / P1×0 / P2×0 / P3×5，全部处置）。二审独立完成补丁源→expected-tree→P.Cell 安装字节三方核验（逐字节一致）、28 锚点唯一性核验、race 场景时间线核验（取消确发生在 b 运行中）。
+
+- P3-1 修复版重装后补 compile 运行时证据（d-e2e-compile-2/cq-2：up_to_date passed 关联验证）；§9.3 编译行标注批次。
+- P3-2 null-id 检查前移入 `unity.handle-valid` 前置条件（violated→退出码 2，不进 execute）；execute 守卫保留为纵深；补 compile-query null-handle 断言。
+- P3-3 §9.4 补过渡期 check:agents 说明。
+- P3-4 CancelTests 单次读取请求文件（守卫与 cancelled 载荷复用同值，消除两次读盘间运行完成导致 runId=null 覆写终态的窗口）——补丁源修复→树再生成→P.Cell 重装→编辑器重载生效。
+- P3-5 补丁测试删除死代码；error 载荷 runId 断言精确化（4 处）。
+
+修复后：u-cli-mod 156 通过；v-cli 392 通过；两仓 check / test:package 全绿。

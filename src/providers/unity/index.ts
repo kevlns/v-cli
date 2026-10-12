@@ -44,6 +44,7 @@ import {
   detectWaitBudgetHandoff,
   doctorReadiness,
   extractFailCount,
+  extractRunId,
   extractStatus,
   extractTotal,
   interpretToolOutput,
@@ -51,6 +52,7 @@ import {
   parseToolStdout,
   type ToolOutput,
 } from "./protocol";
+import { verifyExecutionHandle, type HandleVerification } from "../../core/execution/handle";
 
 export const UNITY_PROVIDER_ID = "unity";
 export const UNITY_PROVIDER_VERSION = "0.2.0";
@@ -123,6 +125,9 @@ const DEFAULT_WAIT_SECONDS: Record<string, number> = {
   "unity.test-start": 30,
   "unity.test-status": 30,
   "unity.test-cancel": 30,
+  "unity.compile-query": 30,
+  "unity.test-query": 30,
+  "unity.test-cancel-run": 30,
 };
 
 export interface UnityProviderDeps {
@@ -170,10 +175,11 @@ const waitSecondsSchema: JsonSchema = {
 };
 
 /** 输入统一由配置绑定：无 projectPath/project 等字段，additionalProperties=false 拒绝覆盖 */
-function execInputSchema(extra: Record<string, JsonSchema> = {}): JsonSchema {
+function execInputSchema(extra: Record<string, JsonSchema> = {}, required: string[] = []): JsonSchema {
   return {
     type: "object",
     additionalProperties: false,
+    ...(required.length > 0 ? { required } : {}),
     properties: { waitSeconds: waitSecondsSchema, ...extra },
   };
 }
@@ -1055,10 +1061,9 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
       },
       followUp: [{ capabilityId: "unity.compile-status", hint: "轮询 recompile_status 直到 completed/up_to_date" }],
       notes: [
-        "recompile 只表示已请求重编译；完成及错误验收由 unity.compile-status 给出",
-        "句柄 backendTaskId=null：后端无任务身份协议（GAP-U1），终态关联 unverified，不可用于句柄关联查询",
+        "recompile 只表示已请求重编译；完成及错误验收由 unity.compile-status（观察）或 unity.compile-query（按句柄关联）给出",
       ],
-      handle: { backendTaskId: null },
+      handle: { backendTaskId: extractRunId(result.tool.payload).runId },
     };
   };
 
@@ -1234,9 +1239,9 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
       followUp: [{ capabilityId: "unity.test-status", hint: "轮询 test_status 直到 completed 并核对失败数" }],
       notes: [
         "本能力固定追加 --async_tests（Unity CLI 同步命令有 30s 硬上限，全量同步必然超时）",
-        "句柄 backendTaskId=null：后端无任务身份协议（GAP-U1），test_status 为观察语义，不可用于句柄关联查询",
+        "句柄 backendTaskId=RunId（后端 patchVersion 3）：用 unity.test-query / unity.test-cancel-run 按句柄关联查询/取消",
       ],
-      handle: { backendTaskId: null },
+      handle: { backendTaskId: extractRunId(result.tool.payload).runId },
     };
   };
 
@@ -1534,6 +1539,374 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     };
   };
 
+  /* --------------------- 句柄关联能力（阶段 D，patchVersion 3） --------------------- */
+
+  /** 句柄校验前置条件：内核统一闸门（身份一致 + 落盘证据回读），失败即执行前拒绝 */
+  function handlePrecondition(triggerCapabilityId: string): PreconditionChecker {
+    return (input, ctx) => {
+      const verification = verifyExecutionHandle({
+        project: ctx.projectAnchor,
+        handle: (input as { handle?: unknown }).handle,
+        expectProviderId: UNITY_PROVIDER_ID,
+        expectCapabilityId: triggerCapabilityId,
+      });
+      if (!verification.ok) {
+        return {
+          id: "unity.handle-valid",
+          status: "violated",
+          detail: `句柄校验失败 [${verification.code}]: ${verification.errors.join("；")}`,
+        };
+      }
+      // 后端身份必须在场（与 execute 内守卫一致的前置闸门：null 句柄不进执行）
+      if (verification.record.backendTaskId === null) {
+        return {
+          id: "unity.handle-valid",
+          status: "violated",
+          detail: "句柄不含后端任务身份（backendTaskId=null，需后端 patchVersion 3 及以上的触发产物）：查询/取消能力拒绝执行",
+        };
+      }
+      return {
+        id: "unity.handle-valid",
+        status: "satisfied",
+        detail: `句柄校验通过（${verification.checks.join("、")}），backendTaskId=${verification.record.backendTaskId}`,
+      };
+    };
+  }
+
+  /** 在 execute 内重跑句柄校验（前置条件已挡；此处取回关联记录组装证据），失败为结构化结果 */
+  function verifyHandleInExecute(
+    input: Record<string, unknown>,
+    ctx: CapabilityExecutionContext,
+    triggerCapabilityId: string,
+  ): { ok: true; verification: Extract<HandleVerification, { ok: true }> } | { ok: false; outcome: ImplementationOutcome } {
+    const verification = verifyExecutionHandle({
+      project: ctx.projectAnchor,
+      handle: input.handle,
+      expectProviderId: UNITY_PROVIDER_ID,
+      expectCapabilityId: triggerCapabilityId,
+    });
+    if (verification.ok) {
+      // 后端身份必须在场：backendTaskId=null 的句柄（阶段 C 时代产物或响应形状漂移）
+      // 不得退化为无 --run_id 的全局语义（定向取消会误伤其他运行；查询会误标 verified）
+      if (verification.record.backendTaskId === null) {
+        return {
+          ok: false,
+          outcome: {
+            execution: {
+              status: "failed",
+              lifecycle: "unknown",
+              exitCode: null,
+              signal: null,
+              error: structuredError(
+                "unity-handle-no-backend-id",
+                "request",
+                "句柄不含后端任务身份（backendTaskId=null，需后端 patchVersion 3 及以上的触发产物）：拒绝执行，绝不退化为全局查询/取消",
+              ),
+            },
+            acceptance: { status: "not-run", reason: "句柄无后端身份，未执行任何后端操作", pending: false, evidence: [] },
+          },
+        };
+      }
+      return { ok: true, verification };
+    }
+    return {
+      ok: false,
+      outcome: {
+        execution: {
+          status: "failed",
+          lifecycle: "unknown",
+          exitCode: null,
+          signal: null,
+          error: structuredError(
+            `unity-handle-${verification.code}`,
+            "request",
+            `句柄校验失败 [${verification.code}]: ${verification.errors.join("；")}`,
+          ),
+        },
+        acceptance: { status: "not-run", reason: "句柄校验失败，未执行任何后端操作", pending: false, evidence: [] },
+      },
+    };
+  }
+
+  function identityEvidence(verification: Extract<HandleVerification, { ok: true }>): Evidence[] {
+    return [
+      evidenceField("原始执行关联", {
+        originOperationId: verification.record.operationId,
+        recordDir: verification.record.recordDir,
+        backendTaskId: verification.record.backendTaskId,
+        checks: verification.checks,
+      }),
+    ];
+  }
+
+  /** payload 为字符串时的二次解析（信封 data.result 字符串形态） */
+  function parsePayload(result: InvocationResult): { payload: unknown; parseError: string | null } {
+    return { payload: result.tool.payload, parseError: result.tool.payloadParseError };
+  }
+
+  const compileQueryExecute: CapabilityImplementation["execute"] = async (input, ctx) => {
+    const dir = findUnityDir(ctx);
+    if (!dir) return backendUnavailableOutcome("缺少工程目录绑定");
+    const checked = verifyHandleInExecute(input, ctx, "unity.compile");
+    if (!checked.ok) return checked.outcome;
+    const runId = checked.verification.record.backendTaskId;
+    const waitSeconds = inputWaitSeconds(input, "unity.compile-query");
+    const argv = buildExecArgv({ projectDir: dir, waitSeconds, pipelineCommand: "recompile_status", pipelineArgs: runId ? ["--run_id", runId] : [] });
+    const invoked = await invokeOrUnavailable(argv, ctx, waitSeconds, dir);
+    if (isOutcome(invoked)) return invoked;
+    const result = invoked;
+    const exec = executionFromProcess(result.outcome);
+    const base = { command: result.command, tool: result.toolInfo, rawOutput: result.rawOutput };
+    if (exec.status !== "succeeded") return failedBeforeRun(result, "recompile_status --run_id", "unity.compile-query");
+    if (result.tool.success === false) return toolReportedFailure(result, "recompile_status --run_id");
+    if (result.handoff) return statusHandoffOutcome(result, "recompile_status --run_id", "unity.compile-query");
+    if (result.tool.parseError !== null) return unparseable(result, "recompile_status --run_id", "unity.compile-query");
+    const { payload, parseError } = parsePayload(result);
+    const evidence: Evidence[] = [...identityEvidence(checked.verification)];
+    const output = (extra: Record<string, unknown>) => ({
+      runId,
+      correlation: "verified",
+      originOperationId: checked.verification.record.operationId,
+      ...extra,
+    });
+    if (parseError !== null) {
+      return {
+        ...base,
+        output: output({ status: null }),
+        execution: { ...exec, lifecycle: "unknown" },
+        acceptance: { status: "not-run", reason: `recompile_status 载荷不可解析: ${parseError}`, pending: true, evidence },
+        followUp: [{ capabilityId: "unity.compile-query", hint: "重新执行本能力以取得结论" }],
+      };
+    }
+    const { status } = extractStatus(payload);
+    const normalized = status?.trim().toLowerCase() ?? null;
+    if (normalized === "unknown_run") {
+      return {
+        ...base,
+        output: output({ status: "unknown_run" }),
+        execution: { ...exec, lifecycle: "unknown" },
+        acceptance: {
+          status: "failed",
+          reason: "句柄关联失效：该次编译的状态记录已被顶替或不存在（含引擎自发编译覆写），绝不采信其他编译的状态",
+          pending: false,
+          evidence: [...evidence, evidenceField("后端 unknown_run", true)],
+        },
+      };
+    }
+    const klass = classifyRecompileStatus(status);
+    if (klass === "completed") {
+      const report = payload as Record<string, unknown>;
+      const noErrors = report.failed === false && Array.isArray(report.errors) && report.errors.length === 0;
+      evidence.push(evidenceField("编译错误报告", report));
+      return {
+        ...base,
+        output: output({ status }),
+        execution: { ...exec, lifecycle: noErrors ? "completed" : "failed" },
+        acceptance: {
+          status: noErrors ? "passed" : "failed",
+          reason: noErrors ? `recompile_status=${status}（runId=${runId}，关联已验证）` : "编译状态已结束，但错误报告缺失或存在编译错误",
+          pending: false,
+          evidence,
+        },
+      };
+    }
+    if (klass === "running") {
+      return {
+        ...base,
+        output: output({ status }),
+        execution: { ...exec, lifecycle: "running" },
+        acceptance: { status: "not-run", reason: `recompile_status=${status}：仍在进行中，继续轮询`, pending: true, evidence },
+        followUp: [{ capabilityId: "unity.compile-query", hint: "继续轮询直到 completed/up_to_date" }],
+      };
+    }
+    return {
+      ...base,
+      output: output({ status }),
+      execution: { ...exec, lifecycle: klass === "failed" ? "failed" : "unknown" },
+      acceptance: { status: "failed", reason: `recompile_status=${status ?? "(缺失)"}（按句柄关联查询，取值异常即不通过）`, pending: false, evidence },
+    };
+  };
+
+  const testQueryExecute: CapabilityImplementation["execute"] = async (input, ctx) => {
+    const dir = findUnityDir(ctx);
+    if (!dir) return backendUnavailableOutcome("缺少工程目录绑定");
+    const checked = verifyHandleInExecute(input, ctx, "unity.test-start");
+    if (!checked.ok) return checked.outcome;
+    const runId = checked.verification.record.backendTaskId;
+    const waitSeconds = inputWaitSeconds(input, "unity.test-query");
+    const argv = buildExecArgv({ projectDir: dir, waitSeconds, pipelineCommand: "test_status", pipelineArgs: runId ? ["--run_id", runId] : [] });
+    const invoked = await invokeOrUnavailable(argv, ctx, waitSeconds, dir);
+    if (isOutcome(invoked)) return invoked;
+    const result = invoked;
+    const exec = executionFromProcess(result.outcome);
+    const base = { command: result.command, tool: result.toolInfo, rawOutput: result.rawOutput };
+    if (exec.status !== "succeeded") return failedBeforeRun(result, "test_status --run_id", "unity.test-query");
+    if (result.tool.success === false) return toolReportedFailure(result, "test_status --run_id");
+    if (result.handoff) return statusHandoffOutcome(result, "test_status --run_id", "unity.test-query");
+    if (result.tool.parseError !== null) return unparseable(result, "test_status --run_id", "unity.test-query");
+    const { payload, parseError } = parsePayload(result);
+    const evidence: Evidence[] = [...identityEvidence(checked.verification)];
+    const output = (extra: Record<string, unknown>) => ({
+      runId,
+      correlation: "verified",
+      originOperationId: checked.verification.record.operationId,
+      ...extra,
+    });
+    if (parseError !== null) {
+      return {
+        ...base,
+        output: output({ status: null, summary: null }),
+        execution: { ...exec, lifecycle: "unknown" },
+        acceptance: { status: "not-run", reason: `test_status 载荷不可解析: ${parseError}`, pending: true, evidence },
+        followUp: [{ capabilityId: "unity.test-query", hint: "重新执行本能力以取得结论" }],
+      };
+    }
+    const { status } = extractStatus(payload);
+    const normalized = status?.trim().toLowerCase() ?? null;
+    const summary = (payload as { summary?: Record<string, unknown> }).summary;
+    if (normalized === "unknown_run") {
+      return {
+        ...base,
+        output: output({ status: "unknown_run", summary: null }),
+        execution: { ...exec, lifecycle: "unknown" },
+        acceptance: {
+          status: "failed",
+          reason: "句柄关联失效：该次测试运行已被顶替或记录不存在，绝不采信其他运行的报告",
+          pending: false,
+          evidence: [...evidence, evidenceField("后端 unknown_run", true)],
+        },
+      };
+    }
+    const klass = classifyTestStatus(status);
+    if (klass === "completed") {
+      const fails = extractFailCount(payload);
+      const totals = extractTotal(payload);
+      const report = detectTestReport(payload);
+      evidence.push(evidenceField("失败数", { value: fails.count, source: fails.source }));
+      evidence.push(evidenceField("有效报告", { present: report.present, sources: report.sources }));
+      const passedOk =
+        report.present &&
+        fails.count !== null &&
+        totals.total !== null &&
+        totals.total > 0 &&
+        fails.count === 0 &&
+        Number.isSafeInteger((summary as { passed?: unknown })?.passed) &&
+        (summary as { passed: number }).passed === totals.total;
+      return {
+        ...base,
+        output: output({ status, summary: summary ?? null }),
+        execution: { ...exec, lifecycle: "completed" },
+        acceptance: {
+          status: passedOk ? "passed" : "failed",
+          reason: passedOk
+            ? `test_status=completed（runId=${runId} 关联已验证）、${totals.total} 项全部通过且失败数 0`
+            : "test_status=completed 但报告无效（缺失/计数无效/零用例/存在失败）：不通过",
+          pending: false,
+          evidence,
+        },
+      };
+    }
+    if (klass === "running") {
+      return {
+        ...base,
+        output: output({ status, summary: null }),
+        execution: { ...exec, lifecycle: "running" },
+        acceptance: { status: "not-run", reason: `test_status=${status}：测试仍在运行，继续轮询`, pending: true, evidence },
+        followUp: [{ capabilityId: "unity.test-query", hint: "继续轮询直到 completed" }],
+      };
+    }
+    if (klass === "cancelled") {
+      return {
+        ...base,
+        output: output({ status, summary: null }),
+        execution: { ...exec, lifecycle: "cancelled" },
+        acceptance: { status: "failed", reason: `test_status=${status}：该运行已取消（后端确认，runId=${runId}）`, pending: false, evidence },
+      };
+    }
+    return {
+      ...base,
+      output: output({ status, summary: null }),
+      execution: { ...exec, lifecycle: "unknown" },
+      acceptance: { status: "failed", reason: `test_status=${status ?? "(缺失)"}（按句柄关联查询，取值异常即不通过）`, pending: false, evidence },
+    };
+  };
+
+  const testCancelRunExecute: CapabilityImplementation["execute"] = async (input, ctx) => {
+    const dir = findUnityDir(ctx);
+    if (!dir) return backendUnavailableOutcome("缺少工程目录绑定");
+    const checked = verifyHandleInExecute(input, ctx, "unity.test-start");
+    if (!checked.ok) return checked.outcome;
+    const runId = checked.verification.record.backendTaskId;
+    const waitSeconds = inputWaitSeconds(input, "unity.test-cancel-run");
+    const argv = buildExecArgv({ projectDir: dir, waitSeconds, pipelineCommand: "cancel_tests", pipelineArgs: runId ? ["--run_id", runId] : [] });
+    const invoked = await invokeOrUnavailable(argv, ctx, waitSeconds, dir);
+    if (isOutcome(invoked)) return invoked;
+    const result = invoked;
+    const exec = executionFromProcess(result.outcome);
+    const base = { command: result.command, tool: result.toolInfo, rawOutput: result.rawOutput };
+    if (exec.status !== "succeeded") return failedBeforeRun(result, "cancel_tests --run_id", "unity.test-cancel-run");
+    if (result.tool.success === false) return toolReportedFailure(result, "cancel_tests --run_id");
+    if (result.handoff) return statusHandoffOutcome(result, "cancel_tests --run_id", "unity.test-cancel-run");
+    if (result.tool.parseError !== null) return unparseable(result, "cancel_tests --run_id", "unity.test-cancel-run");
+    const { payload } = parsePayload(result);
+    const evidence: Evidence[] = [...identityEvidence(checked.verification)];
+    const output = (extra: Record<string, unknown>) => ({
+      runId,
+      originOperationId: checked.verification.record.operationId,
+      ...extra,
+    });
+    const { status } = extractStatus(payload);
+    const normalized = status?.trim().toLowerCase() ?? null;
+    if (normalized === "cancelled") {
+      return {
+        ...base,
+        output: output({ cancelled: true }),
+        execution: { ...exec, lifecycle: "cancelled" },
+        acceptance: {
+          status: "passed",
+          reason: `后端确认取消 runId=${runId}（原始执行 ${checked.verification.record.operationId}）`,
+          pending: false,
+          evidence: [...evidence, evidenceField("后端取消确认", "status=cancelled")],
+        },
+      };
+    }
+    if (normalized === "unknown_run" || normalized === "no_active_run") {
+      return {
+        ...base,
+        output: output({ cancelled: false, reason: normalized }),
+        execution: { ...exec, lifecycle: "unknown" },
+        acceptance: {
+          status: "failed",
+          reason:
+            normalized === "unknown_run"
+              ? "句柄指向的运行不是活动运行（已被顶替或已结束）：未执行任何取消，零副作用"
+              : "当前无活动测试运行：未执行任何取消，零副作用",
+          pending: false,
+          evidence: [...evidence, evidenceField("后端拒绝", normalized)],
+        },
+      };
+    }
+    return {
+      ...base,
+      output: output({ cancelled: false, reason: normalized }),
+      execution: { ...exec, lifecycle: "unknown" },
+      acceptance: { status: "failed", reason: `cancel_tests --run_id 响应异常（status=${status ?? "(缺失)"}），取消未确认`, pending: false, evidence },
+    };
+  };
+
+  const handleQueryChecks: Record<string, PreconditionChecker> = {
+    ...execChecks,
+    "unity.handle-valid": handlePrecondition("unity.test-start"),
+  };
+  const compileQueryChecks: Record<string, PreconditionChecker> = {
+    ...execChecks,
+    "unity.handle-valid": handlePrecondition("unity.compile"),
+  };
+  const handleQueryPreconditions = [
+    ...execPreconditions,
+    { id: "unity.handle-valid", description: "句柄通过内核校验（身份一致 + 落盘证据回读；触发能力匹配）" },
+  ];
+
   /* ------------------------------- 注册表 ------------------------------- */
 
   const registrations: CapabilityRegistration[] = [
@@ -1673,6 +2046,88 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
         tags: ["unity", "test", "cancel"],
       },
       implementation: { preconditions: { ...execChecks }, execute: testCancelExecute },
+    },
+    {
+      descriptor: {
+        id: "unity.compile-query",
+        version: "0.1.0",
+        description:
+          "按句柄关联查询该次编译的状态（recompile_status --run_id；后端 patchVersion 3）。关联失效（被顶替/引擎自发编译覆写）明确 failed，绝不采信其他编译的状态",
+        inputSchema: execInputSchema({ handle: { type: "object", description: "unity.compile 返回的执行句柄（result.handle）" } }, ["handle"]),
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["runId", "correlation", "originOperationId", "status"],
+          properties: {
+            runId: nullableString("后端 runId（句柄 backendTaskId）"),
+            correlation: { type: "string", description: "verified=按句柄关联读取" },
+            originOperationId: { type: "string", description: "原始触发操作 id" },
+            status: nullableString("该次编译的状态；unknown_run=关联失效"),
+          },
+        },
+        preconditions: handleQueryPreconditions,
+        sideEffects: execSideEffects(false),
+        resources: READONLY_RESOURCES,
+        retry: READONLY_RETRY,
+        timeoutMs: 60_000,
+        tags: ["unity", "compile", "handle"],
+      },
+      implementation: { preconditions: { ...compileQueryChecks }, execute: compileQueryExecute },
+    },
+    {
+      descriptor: {
+        id: "unity.test-query",
+        version: "0.1.0",
+        description:
+          "按句柄关联查询该次测试运行（test_status --run_id；后端 patchVersion 3）。关联失效（被顶替/记录不存在）明确 failed，绝不采信其他运行的报告",
+        inputSchema: execInputSchema({ handle: { type: "object", description: "unity.test-start 返回的执行句柄（result.handle）" } }, ["handle"]),
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["runId", "correlation", "originOperationId", "status"],
+          properties: {
+            runId: nullableString("后端 RunId（句柄 backendTaskId）"),
+            correlation: { type: "string", description: "verified=按句柄关联读取" },
+            originOperationId: { type: "string", description: "原始触发操作 id" },
+            status: nullableString("该次运行的状态；unknown_run=关联失效"),
+            summary: { type: "object", nullable: true, description: "completed 时的测试摘要（total/passed/failed/…）" },
+          },
+        },
+        preconditions: handleQueryPreconditions,
+        sideEffects: execSideEffects(false),
+        resources: READONLY_RESOURCES,
+        retry: READONLY_RETRY,
+        timeoutMs: 60_000,
+        tags: ["unity", "test", "handle"],
+      },
+      implementation: { preconditions: { ...handleQueryChecks }, execute: testQueryExecute },
+    },
+    {
+      descriptor: {
+        id: "unity.test-cancel-run",
+        version: "0.1.0",
+        description:
+          "按句柄定向取消该次测试运行（cancel_tests --run_id；后端 patchVersion 3）。目标不是活动运行时后端零副作用拒绝，绝不误伤其他运行",
+        inputSchema: execInputSchema({ handle: { type: "object", description: "unity.test-start 返回的执行句柄（result.handle）" } }, ["handle"]),
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["runId", "originOperationId", "cancelled"],
+          properties: {
+            runId: nullableString("后端 RunId（句柄 backendTaskId）"),
+            originOperationId: { type: "string", description: "原始触发操作 id" },
+            cancelled: { type: "boolean", description: "后端是否确认取消了该运行" },
+            reason: nullableString("未取消时的后端原因（unknown_run / no_active_run）"),
+          },
+        },
+        preconditions: handleQueryPreconditions,
+        sideEffects: execSideEffects(true),
+        resources: EXEC_RESOURCES,
+        retry: TRIGGER_RETRY,
+        timeoutMs: 90_000,
+        tags: ["unity", "test", "cancel", "handle"],
+      },
+      implementation: { preconditions: { ...handleQueryChecks }, execute: testCancelRunExecute },
     },
   ];
 

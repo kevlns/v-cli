@@ -30,6 +30,8 @@ Vant 组织层负责任务调度/持久化任务/资源租约；v-cli 只做注�
 - `v-cli capability list [--provider <id>] [--json]` — 列出 capability（只读，不执行工具）。
 - `v-cli capability describe <id> [--json]` — 单能力完整契约；执行前先读它，不猜参数。
 - `v-cli capability run <id> [--project <目录>] [--input <json> | --input-file <路径>] [--set k=v]… [--operation-id <id>] [--task-id <id>] [--run-id <id>] [--no-persist] [--json]`
+  — 异步触发（unity.compile / unity.test-start）在结果 `handle` 中返回执行句柄（backendTaskId=后端 runId，需 u-cli-mod ≥0.3.0 且工程适配包 patchVersion 3）。
+  按句柄关联操作：`unity.compile-query` / `unity.test-query` / `unity.test-cancel-run`，入参 `--input '{"handle": <结果里的 handle 对象>}'`；关联失效（被顶替/记录不存在）明确 failed（后端 unknown_run），绝不采信其他任务的记录。
 
 ### 硬性规则
 
