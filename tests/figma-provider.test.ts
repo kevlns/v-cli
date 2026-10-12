@@ -113,7 +113,7 @@ describe("figma provider（FakeExecutor）：argv / 托管配置 / 分支", () =
     expect(argv).toContain("--project");
     expect(argv[argv.indexOf("--project") + 1]).toBe(p.clientDir);
     expect(argv).toContain("--config");
-    expect(argv[argv.indexOf("--config") + 1]).toContain(".vant\\state\\figma\\user-config.json");
+    expect(argv[argv.indexOf("--config") + 1]).toContain(path.join(".vant", "state", "figma", "user-config.json"));
     expect(managedConfigArg).toBeTruthy();
 
     const managed = JSON.parse(fs.readFileSync(managedConfigArg!, "utf-8")) as {
