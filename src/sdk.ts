@@ -116,6 +116,15 @@ export {
 } from "./providers/unity";
 
 export {
+  FIGMA_PROVIDER_ID,
+  FIGMA_PROVIDER_VERSION,
+  createFigmaProvider,
+  figmaBindingContract,
+  type FigmaBinding,
+  type FigmaProviderDeps,
+} from "./providers/figma";
+
+export {
   OPERATIONS_RELATIVE,
   PROJECT_CLI_CONFIG_RELATIVE,
   VANT_PROJECT_CONFIG_RELATIVE,

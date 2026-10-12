@@ -75,4 +75,4 @@ Pipeline HTTP 服务在 `/api/exec` 之上另有一套按任务身份的 job 机
 | GAP-U1 | Unity Pipeline 命令层无任务身份（§1 全部结论）；HTTP 层 job 协议受限不可达且不跨 reload（§2b） | 阶段 D（u-cli-mod/pipeline 独立提交；先评估 job 复用，§3.8） | **已闭合**（2026-10-12：命令层 runId 方案 patchVersion 3，v-cli 句柄关联能力真实验收通过） |
 | GAP-U2 | v-cli 未核对 `data.target.projectPath` 回显 | 阶段 C | **已闭合**（2026-10-10 阶段 C） |
 | GAP-V1 | compile-status/test-status 描述已写"读取最近一次"，但缺**归属不可证明**警示（不属于哪次触发/编译槽位被引擎级事件覆写/状态跨会话残留） | 阶段 B | **已闭合**（2026-10-10 阶段 B 补警示） |
-| GAP-F1 | P.Cell 无真实 Figma staging/配置/UPM 包 | 阶段 E | 真实正例降级为隔离样本；正例后补 |
+| GAP-F1 | P.Cell 无真实 Figma staging/配置/UPM 包 | 阶段 E | 阶段 E 隔离样本离线集成完成（2026-10-12）；真实正例仍缺 |

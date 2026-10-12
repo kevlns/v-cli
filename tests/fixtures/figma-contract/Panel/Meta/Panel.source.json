@@ -1,0 +1,38 @@
+{
+  "prefab": { "name": "Panel", "variantFrom": "Assets/Arts/Game/Prefabs/UI Common/ui_base.prefab", "stagingPath": "Assets/Temp/_Staging/Panel" },
+  "source": { "fileKey": "fixture-key", "frameNodeId": "10:1", "frameName": "[root:rcg][name=Panel]" },
+  "identifierTranslations": {},
+  "nodes": [
+    {
+      "figmaNodeId": "10:1",
+      "figmaName": "[root:rcg][name=Panel]",
+      "parentFigmaNodeId": "",
+      "visible": true,
+      "type": "FRAME",
+      "layout": {
+        "rect": { "x": 0, "y": 0, "w": 320, "h": 200 },
+        "constraints": { "horizontal": "min", "vertical": "min" },
+        "positioning": "auto",
+        "align": "inherit",
+        "grow": 0,
+        "sizing": { "width": "fixed", "height": "fixed" }
+      }
+    },
+    {
+      "figmaNodeId": "10:2",
+      "figmaName": "[node:button][name=Button]",
+      "parentFigmaNodeId": "10:1",
+      "visible": true,
+      "type": "FRAME",
+      "layout": {
+        "rect": { "x": 8, "y": 8, "w": 80, "h": 40 },
+        "constraints": { "horizontal": "max", "vertical": "stretch" },
+        "positioning": "absolute",
+        "align": "inherit",
+        "grow": 0,
+        "sizing": { "width": "fixed", "height": "fill" }
+      }
+    }
+  ],
+  "assets": []
+}

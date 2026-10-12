@@ -90,7 +90,13 @@ describe("CLI：project init / inspect", () => {
     expect(payload.action).toBe("created");
     expect(payload.relativeFile).toBe(".vant/config/v-cli.json");
     const config = JSON.parse(readFileSync(join(root, ".vant", "config", "v-cli.json"), "utf-8"));
-    expect(config).toEqual({ schemaVersion: 1, bindings: { unity: { projectDir: "Client" } } });
+    expect(config).toEqual({
+      schemaVersion: 1,
+      bindings: {
+        unity: { projectDir: "Client" },
+        figma: { projectDir: "Client", stagingRoot: "Client/Assets/Arts/Game/FigmaAssets/_Staging" },
+      },
+    });
 
     const second = run(["project", "init", "--project", root, "--json"]);
     expect(second.status).toBe(1);
@@ -158,15 +164,17 @@ describe("CLI：project init / inspect", () => {
 });
 
 describe("CLI：capability list / describe（不执行工具）", () => {
-  it("list --json 列 provider 与 10 个 unity 能力（7 基础 + 3 句柄关联）", () => {
+  it("list --json 列 provider 与 12 个能力（unity 10 + figma 2）", () => {
     const r = run(["capability", "list", "--json"]);
     expect(r.status).toBe(0);
     const payload = r.json as {
       providers: { id: string; state: string }[];
       capabilities: { id: string; preconditions: string[] }[];
     };
-    expect(payload.providers.map((p) => p.id)).toEqual(["unity"]);
+    expect(payload.providers.map((p) => p.id)).toEqual(["unity", "figma"]);
     expect(payload.capabilities.map((c) => c.id)).toEqual([
+      "figma.contract",
+      "figma.doctor",
       "unity.compile",
       "unity.compile-query",
       "unity.compile-status",
@@ -351,7 +359,8 @@ describe("SDK：dist/sdk.mjs 导入与包出口", () => {
     expect(typeof sdk.loadProjectConfig).toBe("function");
     expect(typeof sdk.OperationStore).toBe("function");
     const registry = sdk.createDefaultRegistry();
-    expect(registry.list()).toHaveLength(10);
+    expect(registry.list()).toHaveLength(12);
+    expect(typeof sdk.createFigmaProvider).toBe("function");
     const described = registry.describe("unity.doctor");
     expect(described.provider.id).toBe("unity");
   });
@@ -411,6 +420,10 @@ describe("SDK：dist/sdk.mjs 导入与包出口", () => {
       }),
     );
     const { root } = initProject();
+    // 该注册表仅注册 unity：重写配置只保留 unity 段（含 figma 段会被 fail-closed 拒绝）
+    const configFile = join(root, ".vant", "config", "v-cli.json");
+    writeFileSync(configFile, `${JSON.stringify({ schemaVersion: 1, bindings: { unity: { projectDir: "Client" } } }, null, 2)}
+`, "utf-8");
     const result = await sdk.runCapability(registry, {
       capabilityId: "unity.doctor",
       projectRoot: root,

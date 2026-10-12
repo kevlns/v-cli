@@ -427,3 +427,51 @@ P.Cell 侧变更仅 4 个 pipeline .cs 文件（事务式安装，备份在 Libr
 - P3-5 补丁测试删除死代码；error 载荷 runId 断言精确化（4 处）。
 
 修复后：u-cli-mod 156 通过；v-cli 392 通过；两仓 check / test:package 全绿。
+
+## 10. 阶段 E：Figma 第二个 Provider（已实现）
+
+> 依据：`.vant/docs/spec/phase-a-survey.md` §7（托管配置路线，阶段 A 已实证）。2026-10-12 实施完成。
+
+### 10.1 能力（figma.contract / figma.doctor，全部离线）
+
+- `figma.contract`：真实插件校验 staging 契约。绑定 `{ projectDir, stagingRoot, allowMissingIr? }`（projectDir 与 stagingRoot 必填且 stagingRoot 须位于 projectDir 内——绑定期语义校验，一审后收紧；survey §7 草案的"stagingRoot 可选缺省"在此定稿为必填+默认值由 init 生成，allowMissingIr 可选）；执行时生成 v-cli 托管配置（`.vant/state/figma/user-config.json`，projects 键 = Unity 工程路径的词法规范化，与工具 normalizeProjectKey 一致：正斜杠 + win32 小写；**无令牌字段**），经 `FIGMA_TO_UPREFAB_CONFIG` 注入——不触碰用户真实配置、不要求令牌。
+- `figma.doctor`：逐项 [ok]/[FAIL] 只读诊断；token/editor/unity-package 在离线环境为预期 FAIL（值永不输出，验收如实 failed 而非要求配置令牌）。
+- 协议分流（2026-10-12 补勘）：`Contract valid: N root(s).` 走 stdout；issue 行（`contract: <CON_x> @ <path>: <message>`）与工具级 CFG 码走 stderr——按流解析，不合并。
+- 验收映射：exit 0 + roots>0 → passed；roots=0 → failed（空 staging 无可验收内容）；exit 1 + issues → execution succeeded + acceptance failed（exit 1 是插件"校验不通过"的正常业务语义）；CFG_* → config 类失败 not-run（调用环境问题，不是 staging 结论）；不可解释 → unknown。
+- 边界遵守（计划 §8 六条全部落地）：无网络、无 source→IR、不推广资产、不碰 UIConfig、不调收费接口、不读不输出凭据。
+
+### 10.2 验收（计划 §8 验收标准）
+
+- 合法 staging 通过真实插件验证：win32 真实集成（v-cli node_modules 的 figma-to-uprefab@0.1.2），隔离正例 fixture（Panel 含 source+ir）→ passed roots=1。
+- 非法/缺失 staging 明确失败：坏 index → CON_INDEX_JSON failed；缺 staging → CON_INDEX_MISSING failed（真实插件）。
+- 退出码与业务验收分离：exit 1 的 issues 是 acceptance failed（execution succeeded）；CFG 码不当作 staging 结论（not-run）。
+- 路径越界运行前拒绝：stagingRoot 出工程 → 配置层 unsafe-binding（核心强核对，零后端调用）；staging 内容越界由插件 CON_/PAT_ 码族 fail-closed。
+- 发现和描述不触发工具执行：list/describe 只读（registry 契约不变）；doctor 前置条件失败零后端调用。
+- GAP-F1 现状：P.Cell 无真实 staging/配置/UPM 包——**隔离样本完成离线集成，真实工程正例仍缺**（fixture 已入库 tests/fixtures/figma-contract/）。
+- 本轮离线验证不等价于 Figma 联网导出或 Unity Prefab 转换端到端验证（未做、未声称）。
+
+`npm run check` 与 `npm run test:package` 全绿（407 通过 / 5 条件跳过；win32 真实集成覆盖 contract 正反例与 doctor——doctor 为真实插件运行，token/editor 在离线环境为预期 FAIL）。
+
+### 10.3 一审修复（2026-10-12，已直接合入正文）
+
+一审结论：可合入（P0×0 / P1×0 / P2×2 / P3×6，全部处置）。审查含两次真实插件实证（流分流、多行 issue 消息、8.3 短名键形）。
+
+- P2-1 补测试：doctor CFG-only 分支（config 类 not-run）、abort/超时（unknown/not-run）、win32 真实 doctor（token/editor FAIL 如实列示）；§10.2 括注措辞澄清。
+- P2-2 绑定语义收紧：stagingRoot 必须位于 projectDir 内（绑定期拒绝，含失败用例）——消除"配置合法但必然运行期失败"的陷阱路径（插件的 staging 解析以 Unity 工程为基）。
+- P3：issue 消息内嵌换行的续行并入上一条 issue（消息完整进入证据）；doctor 失败附言按实际失败项生成（离线预期集合外有失败时不附言）；缺绑定路径独立错误码 figma-binding-incomplete；托管配置原子写（tmp+rename，并发 contract/doctor 不读半截 JSON）；§10.1 必填笔误修正与 stagingRoot 定稿标注；protocol 头注释与行为措辞对齐。
+
+修复后：vitest 412 通过 / 5 条件跳过（figma 20 项）。
+
+### 10.4 二审修复与已声明限制（2026-10-12）
+
+二审结论：可合入（P0×0 / P1×0 / P2×0 / P3×7）。处置：
+
+- containment 判据对齐插件精确形式（`rel === ".." || rel.startsWith(".."+sep)`，`..` 前缀目录名不再误判）。
+- 托管配置原子写补 tmp 清理（失败/崩溃残留回收）。
+- doctor 失败分支收窄到 exit===1（exit∉{0,1} 协议漂移 → unknown 不采信）。
+- doctor 附言按实际失败项生成名单（不再静态列全三名）。
+- defaultBinding 增加 projectDir/stagingRoot 存在性警告（对齐 unity 模式）。
+- 测试断言平台门控（key 归一与配置路径含分隔符断言改按 platform 计算）。
+- 登记限制：issue 消息的物理续行在极端形态（续行恰为 issue/工具码形态）下可能被拆分或静默跳过——rawOutput 原文独立留档可回溯，不产生错误验收结论。
+
+修复后：vitest 412 通过 / 5 条件跳过；check / test:package 全绿。

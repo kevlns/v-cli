@@ -1,0 +1,48 @@
+{
+  "prefab": {
+    "name": "Panel",
+    "variantFrom": "Assets/Arts/Game/Prefabs/UI Common/ui_base.prefab",
+    "stagingPath": "Assets/Temp/_Staging/Panel"
+  },
+  "assets": [],
+  "tree": {
+    "name": "Panel",
+    "key": "Panel",
+    "tags": { "node": "root", "components": ["rcg"] },
+    "rcg": { "namespaceName": "Example", "skinName": "PanelSkin", "generatePath": "Assets/Generated" },
+    "figmaNodeId": "10:1",
+    "figmaName": "[root:rcg][name=Panel]",
+    "visible": true,
+    "layout": {
+      "rect": { "x": 0, "y": 0, "w": 320, "h": 200 },
+      "constraints": { "horizontal": "min", "vertical": "min" },
+      "positioning": "auto",
+      "align": "inherit",
+      "grow": 0,
+      "sizing": { "width": "fixed", "height": "fixed" }
+    },
+    "components": {},
+    "references": [],
+    "children": [
+      {
+        "name": "Button",
+        "key": "Button",
+        "tags": { "node": "node", "components": ["button"] },
+        "figmaNodeId": "10:2",
+        "figmaName": "[node:button][name=Button]",
+        "visible": true,
+        "layout": {
+          "rect": { "x": 8, "y": 8, "w": 80, "h": 40 },
+          "constraints": { "horizontal": "max", "vertical": "stretch" },
+          "positioning": "absolute",
+          "align": "inherit",
+          "grow": 0,
+          "sizing": { "width": "fixed", "height": "fill" }
+        },
+        "components": {},
+        "references": [],
+        "children": []
+      }
+    ]
+  }
+}

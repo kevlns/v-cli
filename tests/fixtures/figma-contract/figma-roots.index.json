@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "source": { "fileKey": "fixture-key", "discovery": "all-tagged-roots" },
+  "roots": [
+    {
+      "figmaNodeId": "10:1",
+      "figmaName": "[root:rcg][name=Panel]",
+      "prefabName": "Panel",
+      "pageNodeId": "0:1",
+      "pageName": "Page 1",
+      "visible": true,
+      "sourceManifestPath": "Assets/Temp/_Staging/Panel/Meta/Panel.source.json",
+      "irPath": "Assets/Temp/_Staging/Panel/Meta/Panel.ir.json",
+      "stagingPath": "Assets/Temp/_Staging/Panel"
+    }
+  ]
+}

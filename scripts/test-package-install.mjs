@@ -321,11 +321,11 @@ function smoke(filename) {
       ? path.join(prefix, "node_modules", "@kevlns", "v-cli")
       : path.join(prefix, "lib", "node_modules", "@kevlns", "v-cli");
     const installedCapabilities = JSON.parse(cliExpectOk(prefix, ["capability", "list", "--json"], runOpts));
-    assert(installedCapabilities.capabilities.length === 10, "安装版 capability 注册表未包含十项 Unity 能力（7 基础 + 3 句柄关联）");
+    assert(installedCapabilities.capabilities.length === 12, "安装版 capability 注册表未包含十二项能力（unity 10 + figma 2）");
     const sdkProbe = execFileSync(process.execPath, ["--input-type=module", "-e", `
       import { pathToFileURL } from "node:url";
       const sdk = await import(pathToFileURL(process.argv[1]).href);
-      if (sdk.createDefaultRegistry().list().length !== 10) throw new Error("SDK 注册表不可用");
+      if (sdk.createDefaultRegistry().list().length !== 12) throw new Error("SDK 注册表不可用");
       if (typeof sdk.runCapability !== "function") throw new Error("SDK 执行入口缺失");
       if (sdk.validateValue(false, {type:"boolean",enum:[true]}).length === 0) throw new Error("SDK 未执行真实校验");
       console.log("installed-sdk-ok");

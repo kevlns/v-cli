@@ -10,6 +10,7 @@ import type { ProcessExecutor } from "./core/execution/executor";
 import { NodeProcessExecutor } from "./core/execution/executor";
 import type { CapabilityProvider } from "./core/execution/types";
 import { createUnityProvider, type UnityProviderDeps } from "./providers/unity";
+import { createFigmaProvider, type FigmaProviderDeps } from "./providers/figma";
 
 export interface DefaultRegistryOptions {
   executor?: ProcessExecutor;
@@ -17,6 +18,8 @@ export interface DefaultRegistryOptions {
   providers?: CapabilityProvider[];
   /** 覆盖 Unity 后端发现（测试/夹具注入；providers 提供时忽略） */
   discoverBackend?: UnityProviderDeps["discoverBackend"];
+  /** 覆盖 Figma 后端发现（测试/夹具注入；providers 提供时忽略） */
+  figmaDiscoverBackend?: FigmaProviderDeps["discoverBackend"];
   /** 覆盖 Unity 后端环境变量（providers 提供时忽略） */
   unityEnv?: Record<string, string | undefined>;
 }
@@ -28,11 +31,18 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Cap
     for (const provider of options.providers) registry.registerProvider(provider);
     return registry;
   }
+  const executor = options.executor ?? new NodeProcessExecutor();
   registry.registerProvider(
     createUnityProvider({
-      executor: options.executor ?? new NodeProcessExecutor(),
+      executor,
       discoverBackend: options.discoverBackend,
       env: options.unityEnv,
+    }),
+  );
+  registry.registerProvider(
+    createFigmaProvider({
+      executor,
+      discoverBackend: options.figmaDiscoverBackend,
     }),
   );
   return registry;
