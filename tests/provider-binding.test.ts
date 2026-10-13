@@ -188,17 +188,22 @@ describe("路径与危险键在执行前被拒绝", () => {
     const project = tempProject();
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "vcli-bind-out-"));
     const linkPath = path.join(project.root, "Linked");
-    if (!tryLinkDir(outside, linkPath)) {
-      expect(true).toBe(true);
-      return;
+    const linked = tryLinkDir(outside, linkPath);
+    try {
+      if (!linked) {
+        expect(true).toBe(true);
+        return;
+      }
+      fs.writeFileSync(
+        project.configFile,
+        JSON.stringify({ schemaVersion: 1, bindings: { sample: { workspaceDir: "Linked" } } }),
+      );
+      const loaded = loadProjectConfig(resolveProjectRoot(project.root), toProviderSet([createSampleProvider()]));
+      expect(loaded.ok).toBe(false);
+    } finally {
+      if (linked) fs.unlinkSync(linkPath);
+      fs.rmSync(outside, { recursive: true, force: true });
     }
-    fs.writeFileSync(
-      project.configFile,
-      JSON.stringify({ schemaVersion: 1, bindings: { sample: { workspaceDir: "Linked" } } }),
-    );
-    const loaded = loadProjectConfig(resolveProjectRoot(project.root), toProviderSet([createSampleProvider()]));
-    expect(loaded.ok).toBe(false);
-    fs.rmSync(outside, { recursive: true, force: true });
   });
 
   it("__proto__ 等危险键在配置外壳层被拒绝（loadProjectConfig 全链路）", () => {

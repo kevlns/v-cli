@@ -1,6 +1,6 @@
 {
   "name": "@kevlns/v-cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "kevlns 的个人工具箱 CLI（插件化架构 + 结构化 capability 注册/执行基座）+ doctor/plugin/ts/agent/project/capability 命令",
   "type": "module",
   "bin": {
@@ -58,7 +58,7 @@
     "@kevlns/figma-to-uprefab": "0.1.2",
     "@kevlns/ship-cli": "0.1.1",
     "@kevlns/u-cli-mod": "^0.3.0",
-    "@kevlns/xlmerge": "2.0.1",
+    "@kevlns/xlmerge": "2.0.2",
     "commander": "^12.1.0"
   },
   "devDependencies": {
