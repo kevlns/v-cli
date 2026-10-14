@@ -1,6 +1,6 @@
 {
   "name": "@kevlns/v-cli",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "kevlns 的个人工具箱 CLI（插件化架构 + 结构化 capability 注册/执行基座）+ doctor/plugin/ts/agent/project/capability 命令",
   "type": "module",
   "bin": {
@@ -18,7 +18,8 @@
     "dist/",
     "schemas/",
     "skills/",
-    "AGENTS.md"
+    "AGENTS.md",
+    "docs/"
   ],
   "scripts": {
     "build": "tsup",
@@ -29,7 +30,8 @@
     "check:agents": "node scripts/generate-agents.mjs --check",
     "pack:guard": "node scripts/pack-guard.mjs",
     "test:package": "node scripts/test-package-install.mjs",
-    "check": "npm run build && npm run typecheck && npm test && npm run check:agents && npm run pack:guard"
+    "check": "npm run build && npm run typecheck && npm test && npm run docs:check && npm run pack:guard",
+    "docs:check": "node scripts/check-docs.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -54,7 +56,7 @@
     "personal"
   ],
   "dependencies": {
-    "@kevlns/art-workshop": "0.2.1",
+    "@kevlns/art-workshop": "0.3.0",
     "@kevlns/figma-to-uprefab": "0.1.2",
     "@kevlns/ship-cli": "0.1.1",
     "@kevlns/u-cli-mod": "^0.3.0",

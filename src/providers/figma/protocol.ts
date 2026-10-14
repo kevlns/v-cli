@@ -1,7 +1,7 @@
 /**
  * figma-to-uprefab CLI 输出解释层（保守、只认证据）。
  *
- * 协议来源（2026-10-10/12 实测与源码核对，见 phase-a-protocol-samples.md §4）：
+ * 协议解释见 docs/provider-protocols.md，字段依据真实工具输出与协议测试。
  * - `contract`：stdout 文本。正例一行 `Contract valid: N root(s).`（exit 0）；
  *   反例逐行 `contract: <CON_x> @ <path>: <message>`（exit 1）。
  * - `doctor`：stdout 逐行 `[ok]   name: message` / `[FAIL] name: message`（exit 0=全 ok，1=有 FAIL）。

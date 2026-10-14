@@ -292,9 +292,9 @@ describe("一审修复回归", () => {
     const registry = createDefaultRegistry({ providers: [createSampleProvider()] });
     expect(registry.providers().map((p) => p.id)).toEqual(["sample"]);
     expect(registry.list().map((c) => c.id)).toEqual(["sample.cancel", "sample.echo", "sample.query", "sample.trigger"]);
-    // 缺省装配是内置 unity + figma
+    // 缺省装配是内置 unity + figma + art
     const builtin = createDefaultRegistry({ executor: stubExecutor });
-    expect(builtin.providers().map((p) => p.id)).toEqual(["unity", "figma"]);
+    expect(builtin.providers().map((p) => p.id)).toEqual(["unity", "figma", "art"]);
   });
 
   it("绑定段内部嵌套的危险键被 validateValue 纵深拒绝", () => {

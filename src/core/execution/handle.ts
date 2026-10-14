@@ -1,11 +1,11 @@
 /**
- * 异步执行句柄（阶段 C）：可序列化身份凭证 + 落盘证据回读校验。
+ * 异步执行句柄：可序列化身份凭证 + 落盘证据回读校验。
  *
- * 设计要点（对应计划 §6 与 survey §4）：
+ * 设计约束见 docs/execution-identities.md：
  * - 句柄由内核在异步触发结果中产出（Provider 只提供 backendTaskId 种子）；
  *   调用方提交的句柄**不可信**——查询/取消前必须经 verifyExecutionHandle 全量校验。
  * - 校验依据是**落盘证据的一致性核对**（启动 operation 的 result.json），不是密码学签名：
- *   integrity 摘要仅防手滑改动/截断（survey §9 决策 5）。
+ *   integrity 摘要仅防手滑改动/截断。
  * - 禁止"证据缺失/校验失败时回退最近一次任务"；不能恢复的句柄给出明确错误。
  * - 每次查询/取消是独立 operationId（runCapability 天然保证）；校验只**读**启动目录，绝不复用覆盖。
  */

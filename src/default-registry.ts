@@ -10,6 +10,7 @@ import type { ProcessExecutor } from "./core/execution/executor";
 import { NodeProcessExecutor } from "./core/execution/executor";
 import type { CapabilityProvider } from "./core/execution/types";
 import { createUnityProvider, type UnityProviderDeps } from "./providers/unity";
+import {createArtProvider,type ArtProviderDeps} from './providers/art';
 import { createFigmaProvider, type FigmaProviderDeps } from "./providers/figma";
 
 export interface DefaultRegistryOptions {
@@ -19,9 +20,11 @@ export interface DefaultRegistryOptions {
   /** 覆盖 Unity 后端发现（测试/夹具注入；providers 提供时忽略） */
   discoverBackend?: UnityProviderDeps["discoverBackend"];
   /** 覆盖 Figma 后端发现（测试/夹具注入；providers 提供时忽略） */
+  artDiscoverBackend?: ArtProviderDeps['discoverBackend'];
   figmaDiscoverBackend?: FigmaProviderDeps["discoverBackend"];
   /** 覆盖 Unity 后端环境变量（providers 提供时忽略） */
   unityEnv?: Record<string, string | undefined>;
+  artEnv?: ArtProviderDeps['env'];
 }
 
 /** 构建注册表；注册失败是编码错误，直接抛出 */
@@ -45,5 +48,6 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Cap
       discoverBackend: options.figmaDiscoverBackend,
     }),
   );
+  registry.registerProvider(createArtProvider({executor,discoverBackend:options.artDiscoverBackend,env:options.artEnv}));
   return registry;
 }

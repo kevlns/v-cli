@@ -5,7 +5,7 @@
  * 流程：npm pack 生成 tgz → 在隔离临时 prefix 中做一次真实 `npm install --global`，
  * 官方依赖 xlmerge / u-cli-mod / figma-to-uprefab / ship-cli / art-workshop 由 registry
  * 正常解析安装 → 通过 npm 生成的 bin wrapper（非直接运行 dist/cli.mjs）执行 CLI，断言：
- *   - `--version` 为 0.3.1；
+ *   - `--version` 为 0.4.0；
  *   - `plugin list --json` 报告 xlmerge available；unity 在 win32 为 available、
  *     非 win32 为 platform-mismatch；figma 同样遵循 Windows 平台门禁；
  *   - `agent index --json` / `agent describe --json` 暴露官方清单全量元数据
@@ -30,7 +30,7 @@ import { createHash } from "node:crypto";
 
 const ROOT = process.cwd();
 const IS_WIN = process.platform === "win32";
-const VERSION = "0.3.1";
+const VERSION = "0.4.0";
 const XL_VERSION = "2.0.2";
 const UNITY_VERSION = "0.3.0";
 const FIGMA_VERSION = "0.1.2";
@@ -188,13 +188,15 @@ function smoke(filename) {
     const runOpts = { cwd: work, env };
     {
       const artRows = JSON.parse(cliExpectOk(prefix, ["plugin", "list", "--json"], runOpts));
-      assert(artRows.some(row => row.name === "art" && row.status === "available" && row.version === "0.2.1"), "美术工坊没有被自动发现");
+      assert(artRows.some(row => row.name === "art" && row.status === "available" && row.version === "0.3.0"), "美术工坊没有被自动发现");
       const artDesc = JSON.parse(cliExpectOk(prefix, ["agent", "describe", "art", "--json"], runOpts));
-      for (const command of ["style freeze", "generate run", "edit run", "refs guide", "config validate", "doctor", "workflow list", "task list", "task status", "task wait", "task cancel", "shutdown"])
+      const artManifest = JSON.parse(fs.readFileSync(path.join(path.dirname(installedDepPath(prefix, "@kevlns/art-workshop")), "v-cli.plugin.json"), "utf8"));
+      assert(artDesc.commands?.length === artManifest.agent.commands.length, "美术工坊命令发现不完整");
+      for (const command of artManifest.agent.commands.map(command => command.path.join(" ")))
         assert(hasFullMeta(artDesc.commands?.find(c => c.path.join(" ") === command)), "美术工坊清单缺少 " + command);
       const artDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "art", "--json"], runOpts));
       assert(artDocs.package === "@kevlns/art-workshop" && artDocs.sha256 === sha256(artDocs.content), "美术工坊随包规范读取失败");
-      assert(cliExpectOk(prefix, ["art", "--version"], runOpts).trim() === "0.2.1", "美术工坊版本路由失败");
+      assert(cliExpectOk(prefix, ["art", "--version"], runOpts).trim() === "0.3.0", "美术工坊版本路由失败");
       assert(cliExpectOk(prefix, ["art", "--help"], runOpts).includes("generate"), "美术工坊帮助路由失败");
       const settings = JSON.parse(cliExpectOk(prefix, ["art", "config", "show"], runOpts));
       assert(settings.file === artConfig && settings.paths.workspace === work, "美术工坊未使用同一份外部本地配置");
@@ -321,11 +323,18 @@ function smoke(filename) {
       ? path.join(prefix, "node_modules", "@kevlns", "v-cli")
       : path.join(prefix, "lib", "node_modules", "@kevlns", "v-cli");
     const installedCapabilities = JSON.parse(cliExpectOk(prefix, ["capability", "list", "--json"], runOpts));
-    assert(installedCapabilities.capabilities.length === 12, "安装版 capability 注册表未包含十二项能力（unity 10 + figma 2）");
+    const localCapabilities = JSON.parse(execFileSync(process.execPath, [path.join(ROOT, "dist/cli.mjs"), "capability", "list", "--json"], {encoding:"utf8",cwd:runOpts.cwd,env:runOpts.env}));
+    const ids = result => result.capabilities.map(row => row.id).sort();
+    const expectedIds = ids(localCapabilities);
+    assert(JSON.stringify(ids(installedCapabilities)) === JSON.stringify(expectedIds), "安装版 capability 与当前构建的完整能力集合不一致");
+    for (const id of ["unity.compile-query", "unity.test-query", "figma.contract", "art.run-status", "art.run-resume", "art.candidate-finalize"])
+      assert(expectedIds.includes(id), "缺少必要能力：" + id);
     const sdkProbe = execFileSync(process.execPath, ["--input-type=module", "-e", `
       import { pathToFileURL } from "node:url";
       const sdk = await import(pathToFileURL(process.argv[1]).href);
-      if (sdk.createDefaultRegistry().list().length !== 12) throw new Error("SDK 注册表不可用");
+      const expected = ${JSON.stringify(expectedIds)};
+      const actual = sdk.createDefaultRegistry().list().map(row => row.id).sort();
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("SDK 与 CLI 注册表不一致");
       if (typeof sdk.runCapability !== "function") throw new Error("SDK 执行入口缺失");
       if (sdk.validateValue(false, {type:"boolean",enum:[true]}).length === 0) throw new Error("SDK 未执行真实校验");
       console.log("installed-sdk-ok");

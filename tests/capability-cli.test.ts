@@ -93,6 +93,7 @@ describe("CLI：project init / inspect", () => {
     expect(config).toEqual({
       schemaVersion: 1,
       bindings: {
+        art: {workspace:'.vant/art',output:'.vant/art/output',cache:'.vant/art/cache',projectId:'project'},
         unity: { projectDir: "Client" },
         figma: { projectDir: "Client", stagingRoot: "Client/Assets/Arts/Game/FigmaAssets/_Staging" },
       },
@@ -133,7 +134,7 @@ describe("CLI：project init / inspect", () => {
     const dryPayload = dry.json as { action: string; dryRun: boolean; added: string[] };
     expect(dryPayload.action).toBe("reconciled");
     expect(dryPayload.dryRun).toBe(true);
-    expect(dryPayload.added).toEqual(["figma"]);
+    expect(dryPayload.added).toEqual(["figma", "art"]);
     // dry-run 未写：文件仍是 unity-only
     expect(JSON.parse(readFileSync(configFile, "utf-8")).bindings).toEqual(oldStyle.bindings);
 
@@ -141,7 +142,7 @@ describe("CLI：project init / inspect", () => {
     expect(real.status).toBe(0);
     const realPayload = real.json as { action: string; added: string[] };
     expect(realPayload.action).toBe("reconciled");
-    expect(realPayload.added).toEqual(["figma"]);
+    expect(realPayload.added).toEqual(["figma", "art"]);
     const merged = JSON.parse(readFileSync(configFile, "utf-8")) as { bindings: Record<string, unknown> };
     expect(merged.bindings.unity).toEqual(oldStyle.bindings.unity); // 手工钉扎原样保留
     expect((merged.bindings.figma as { stagingRoot: string }).stagingRoot).toContain("_Staging");
@@ -207,15 +208,15 @@ describe("CLI：project init / inspect", () => {
 });
 
 describe("CLI：capability list / describe（不执行工具）", () => {
-  it("list --json 列 provider 与 12 个能力（unity 10 + figma 2）", () => {
+  it("list --json 列 provider 与 Unity、Figma 与美术工坊能力", () => {
     const r = run(["capability", "list", "--json"]);
     expect(r.status).toBe(0);
     const payload = r.json as {
       providers: { id: string; state: string }[];
       capabilities: { id: string; preconditions: string[] }[];
     };
-    expect(payload.providers.map((p) => p.id)).toEqual(["unity", "figma"]);
-    expect(payload.capabilities.map((c) => c.id)).toEqual([
+    expect(payload.providers.map((p) => p.id)).toEqual(["unity", "figma", "art"]);
+    expect(payload.capabilities.filter((c)=>!c.id.startsWith("art.")).map((c) => c.id)).toEqual([
       "figma.contract",
       "figma.doctor",
       "unity.compile",
@@ -402,7 +403,8 @@ describe("SDK：dist/sdk.mjs 导入与包出口", () => {
     expect(typeof sdk.loadProjectConfig).toBe("function");
     expect(typeof sdk.OperationStore).toBe("function");
     const registry = sdk.createDefaultRegistry();
-    expect(registry.list()).toHaveLength(12);
+    expect(registry.describe("art.generate-start").id).toBe("art.generate-start");
+    expect(typeof sdk.createArtProvider).toBe("function");
     expect(typeof sdk.createFigmaProvider).toBe("function");
     const described = registry.describe("unity.doctor");
     expect(described.provider.id).toBe("unity");
