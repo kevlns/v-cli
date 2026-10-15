@@ -18,6 +18,15 @@ const config = {
   },
 };
 describe("art controlled execution and lifecycle", () => {
+  it("publishes only drawing reference categories and rejects removed shape classification before execution", async () => {
+    const project=makeTempProject({config,withProjectVersion:false}),executor=new FakeExecutor(()=>({stdout:"{}"})),registry=new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend()}));
+    try {
+      const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.reference-import",input:{kind:"style",id:"style-a",revision:1,source:"image.png",category:"shape-language"}});
+      expect(result.execution.status).toBe("failed");
+      expect(executor.calls).toHaveLength(0);
+    } finally {project.cleanup();}
+  });
   it("settles malformed synchronous responses but retains uncertain background ownership",async()=>{
     const project=makeTempProject({config,withProjectVersion:false});
     const registry=new CapabilityRegistry();

@@ -201,7 +201,7 @@ const definitions: Definition[] = [
       source: file,
       category: {
         type: "string",
-        enum: ["style", "palette", "shape-language", "rendering"],
+        enum: ["style", "palette", "rendering"],
       },
       purposes: { type: "string" },
       note: { type: "string" },
