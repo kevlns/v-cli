@@ -3,52 +3,120 @@ name: v-cli
 description: 使用 v-cli 发现和执行工程能力，路由 Unity、Figma、配置表冲突、游戏交付与美术工坊工具。
 ---
 
-# v-cli 调用规范
+# Vant 工具命令入口 Agent 规范
 
-## 发现与职责
+## 定位
 
-先 v-cli doctor、v-cli agent index --json，再对目标执行 agent describe。官方插件首调必须先 v-cli agent docs 命令名；当前版本、参数和平台以实时输出为准，不凭旧版本表猜测。
+发现工具、绑定工程、执行结构化能力并保存操作证据。
 
-命令分 builtin/local/official。官方入口为 art、unity、figma、ship、xlmerge；结构化 provider 当前为 unity、figma、art。插件入口与 capability 不等价，不能假设所有插件都有结构化能力。插件原样消费参数和输出，v-cli 不改写业务 JSON。
+## 调用流程
 
-用户的已有授权和偏好持续有效。描述、发现、校验与预演不自动授权生成、上传、定版、安装或发布；按实际任务授权执行，不重复询问已获授权的步骤。
+先 doctor 和 agent index，再读取目标工具的 agent docs 与 describe。
 
-## 工程绑定与执行
+## 调用规范
 
-工程根用 --project 明确锚定；缺配置先 project init，操作前 describe 目标契约。配置 .vant/config/v-cli.json 只包含 CLI bindings；Vant 角色/workflow 属 .vant/config/project.json，v-cli 不读写。art 需显式 workspace/output/cache/projectId，不能猜 ID。
 
-project init 默认只补有默认值的缺失段，保留已有值。--binding 修改已有段会被拒绝；有重置意图才用 --reset，旧配置先备份。--dry-run 不写入。绑定路径拒绝穿越、绝对覆盖和链接越界。
+<!-- v-cli-agents:generated -->
 
-capability run 按 --input-file、--input、--set 顺序合并，后者覆盖同名值；输入文件路径以当前目录解析。不得在输入、文件、argv 和日志中传密钥。实际 Provider 凭据通过受控环境或凭据存储提供。
+> 本文件由 `scripts/generate-agents.mjs` 自动生成，请勿手改。
+> 修改插件清单后运行 `npm run generate:agents` 重新生成，`npm run check:agents` 校验漂移。
 
-每次调用使用唯一 operationId，记录在工程 .vant/state/operations。查询也是新操作，不覆盖启动记录。--no-persist 只用于不依赖后续证据的探测，不应用于需要句柄恢复的生产启动。
+### 核心约定（v-cli 本体）
 
-## 生命周期与恢复
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.4.6
+- 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
+  **命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
+- 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
+- AI Agent 引导文档：`v-cli agent docs` 输出本文件原文（`--json` 含 sha256/content）；
+  `v-cli agent init .` 把它写入工作区（已存在默认拒绝，`--force` 覆盖，`--dry-run` 预览；符号链接目标 fail-closed）；
+  同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等），无匹配则跳过；
+  随包版本是规范唯一权威：同名 SKILL.md 一律按随包版本刷新（本地修改会被覆盖并提示）；随包没有的文件（项目扩展，如 PROJECT.md）默认保留，`--force` 时完全同步
+- 工程执行基座（内置命令）：`v-cli project init|inspect` 管理工程根绑定 `.vant/config/v-cli.json`
+  （该文件只写 CLI 能力/适配器绑定；角色/workflow/项目组织属于 Vant 的 `.vant/config/project.json`，v-cli 既不读也不写）；
+  `v-cli capability list|describe|run` 列出/查看/执行结构化 capability（稳定 id、输入输出 schema、前置条件、声明的副作用、资源需求、重试语义）
+- capability run 的语义：工程根用 `--project` 显式锚定；输入由配置绑定（不接受 projectPath 等覆盖）；
+  **执行状态与验收状态分离**——工具进程退出码 0 不等于业务通过，capability 退出码 0 只在验收 passed 时出现（1=执行/验收失败，2=未执行，3=已执行但验收 not-run 需按 followUp 轮询，4=已确认取消，5=结果未知）；
+  每次执行在 `<工程根>/.vant/state/operations/<operationId>/` 保存输入摘要、事件与结果证据（本地记录，不是任务队列；`--no-persist` 可关闭）；
+  **lifecycle 是任务级六态**（accepted/running/completed/failed/cancelled/unknown；unknown=不可解释/不可知，绝不升级）；异步触发在结果 `handle` 中返回可序列化执行句柄——查询/取消类能力以 `input.handle` 传入并用内核校验（落盘证据回读，失败明确拒绝不回退最近任务）；Unity 后端提供 runId：`unity.compile`/`unity.test-start` 句柄的 backendTaskId=runId，用 `unity.compile-query`/`unity.test-query`/`unity.test-cancel-run` 按句柄关联查询/定向取消（关联失效=后端 unknown_run，明确 failed 不采信其他任务记录）
+- 默认结构化 provider 为 unity、figma、art；先 `v-cli capability describe <id> --json` 读契约，受控 argv 调用不拼 shell；
+  figma provider（`@kevlns/figma-to-uprefab`，离线）：`figma.contract` 校验 staging 契约（roots>0 才通过）、`figma.doctor` 只读诊断——v-cli 注入无令牌托管配置，无网络、不碰凭据；
+  exec 类能力默认自动跑一次 doctor 核对就绪判据（不得跳过）；`unity.compile`/`unity.test-start` 是异步触发，只报告 accepted，按原 handle 轮询 `unity.compile-query`/`unity.test-query`；无参 status 只观察当前/最近槽位；测试 completed、有效非零报告且全部用例通过才 passed
+- **首调规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，
+  掌握该插件包内 `AGENTS.md`；使用规范、快速流程与禁止事项以插件 AGENTS.md 为准。
+- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`、`v-cli ship …`、`v-cli art …`）在子进程中运行（stdio 继承）：v-cli 只做路由，不解析或改写插件输出。
+- `art` 是随包美术工坊插件；先读 `v-cli agent docs art`，用 `v-cli art config show`、`v-cli art agent index` 和 `v-cli art config validate` 确认工程、核心及远程/本地后端。本地执行前用 `workflow list` 和 `doctor` 检查工作流与环境；任务控制用 `task list/status/wait/cancel/recover/resume`；resume 只查询原上游与下载。`shutdown` 停止当前工作区关联任务，核验共享队列和进程身份后关闭服务。真实分析和生成按任务授权执行。
+- `ship` 是随包官方插件（@kevlns/ship-cli），随 v-cli 安装并自动发现；先运行 `v-cli agent docs ship`、`v-cli ship doctor --json`，再按 Steam / 微信小游戏流程执行。缺失时明确报告 missing，不在运行时自动安装。
+- 插件 `--help`/`--json` 等参数由插件自己消费；art 的模型登记、参数策略和执行回执归工具维护，v-cli 不复制目录。
+- 插件对 worktree 的写入/提交行为以插件清单 v-cli.plugin.json 的 `agent.safety` 为准：
+  v-cli 不替插件做 diff/write-back/commit；**未经显式 flag 不得 push**
 
-execution.status 是调用状态；execution.lifecycle 是后端六态 accepted/running/completed/failed/cancelled/unknown；acceptance.status 是 passed/failed/not-run。退出码 0/1/2/3/4/5 分别表示验收通过、失败、未执行、未验收、确认取消、未知。
+### @kevlns/art-workshop — 命令 `v-cli art …`
 
-异步 accepted 不是完成。按 followUp 和完整原 handle 查询；不能因超时或丢失回执重复提交。句柄通过原操作证据验证，完整性摘要不是签名，不能替代访问控制。缺证据、身份不符或 unknown_run 都不得回退最近任务。
+**版本**：0.3.7
+**描述**：管理项目风格、参考图、图片生成、编辑和定版。支持本地 ComfyUI 与远程图片模型。
+**平台**：win32, linux, darwin
 
-Unity 关联能力为 compile-query、test-query、test-cancel-run；无参 compile-status/test-status 只是当前/最近观察。测试必须 completed、有非零有效报告且全部通过；缺报告、零用例、未知字段都不能报通过。
+**何时使用**：先读取对象和版本，编译并预演后在授权范围后台执行。风格分析有独立运行身份，采用检查报告来源；任务空闲才可编辑，停止未确认保留资源。生成完成仅做技术完整性校验，用户定版，不要求人工三维评分。
 
-art.run-status/run-cancel/run-resume 使用原 handle。run-recover 仅按原 operation 找登记；run-resume 仅继续查询/下载，不补发生成。任务终态与停止证据独立，unknown/停止未确认保留占用；重试明确失败项也必须先确认原执行已停止。
+**首次调用前必读**：`v-cli agent docs art`（插件包内 AGENTS.md 规范正本）
+**实时参数/命令**：`v-cli agent describe art --json`
 
-## 各工具边界
+### @kevlns/figma-to-uprefab — 命令 `v-cli figma …`
 
-| 工具 | 必须遵守 |
-| --- | --- |
-| art | 读取原对象和 revision；先 plan/dry，动态参考先分析；配置或引用变更重编译。模型登记归 art。只有生成和定版阶段，check 核验完整性；定版不自动集成或提交 |
-| unity | 先 doctor，CLI valid、pipeline installed/current 才 exec；精确 Editor 路由，不改 ProjectVersion。只连接已打开的目标工程；目标 Editor 运行时安装限制不能擅自绕过 |
-| figma | 结构化 doctor/contract 离线；托管配置不含 token。contract roots>0 才通过，空 staging 不算成功。输出限 staging，不自动迁正式资源或写 UIConfig |
-| ship | 先读插件规范并核对平台；上传与发布分开，Steam 默认分支生效、微信审核/玩家发布不自动执行 |
-| xlmerge | detect 后按整批 launch；有人工项给用户 URL，停止分析单元格或代选 ours/theirs。无人工项可按既有过滤规则处理；新增 autoTheirs 需用户明确要求，禁止擅自 push |
+**版本**：0.1.3
+**描述**：将 Figma 标记画板导出为源数据和图片，通过 Unity 转换器生成 UGUI 预制体。
+**平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
-Unity exec 不传任何 --project-path 变体，目标由绑定决定。安装为事务操作，不手删 Packages/com.unity.pipeline 或 Library/editor-pipeline-cli。异步全量测试触发后轮询，不重复启动；编译/Console/测试以真实目标 Editor 为准。
+**何时使用**：导出 Figma 标记画板，校验源清单与图片，在 Unity 中生成暂存 UGUI 预制体；不将产物直接转入运行时目录或写入 UIConfig。
 
-xlmerge 正常交互不使用阻塞式 resolve；无头 prepare/apply 仅限自动测试或明确决策 JSON。只处理单文件时才限制 --path；多文件不逐个循环。未经明确请求不 push。
+**首次调用前必读**：`v-cli agent docs figma`（插件包内 AGENTS.md 规范正本）
+**实时参数/命令**：`v-cli agent describe figma --json`
 
-## 文档与技能同步
+### @kevlns/ship-cli — 命令 `v-cli ship …`
 
-随包 AGENTS.md 和技能为调用规范源。需要装配时先在目标工程根运行 agent init --dry-run --json；已有 AGENTS.md 默认整体拒绝，不擅自 force。--force 覆盖 AGENTS 并完全同步技能，项目扩展写独立文件，不能修改随包技能求持久保留。
+**版本**：0.1.2
+**描述**：校验已构建的游戏产物，执行 Steam 上传、微信小游戏预览和开发版上传。
+**平台**：win32, linux, darwin
 
-源码维护任务应核对实现、生成源与测试；日常调用以 live 元数据为准。模型请求合法、mock 通过、工具包可导入、引擎实际运行和已安装版本是不同证据，报告时分别说明。
+**何时使用**：处理已构建游戏的 Steam 上传、微信小游戏预览与开发版上传；执行离线产物校验与环境检查。正式发布、提审和账号管理在平台后台完成，工具不构建引擎产物。
+
+**首次调用前必读**：`v-cli agent docs ship`（插件包内 AGENTS.md 规范正本）
+**实时参数/命令**：`v-cli agent describe ship --json`
+
+### @kevlns/u-cli-mod — 命令 `v-cli unity …`
+
+**版本**：0.3.1
+**描述**：按 Unity Editor 精确版本定位工具链，校验和安装 com.unity.pipeline，并执行工程命令。
+**平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
+
+**何时使用**：用于 Windows 的 Unity 2022 工程诊断、精确版本路由、已校验工具下载、事务式安装及明确绑定工程的 Pipeline 调用。
+
+**首次调用前必读**：`v-cli agent docs unity`（插件包内 AGENTS.md 规范正本）
+**实时参数/命令**：`v-cli agent describe unity --json`
+
+### @kevlns/xlmerge — 命令 `v-cli xlmerge …`
+
+**版本**：2.0.3
+**描述**：在浏览器中审阅 Git 冲突工作簿的三方差异，校验后写回并提交合并结果。
+**平台**：darwin, linux, win32
+
+**何时使用**：When a user asks to resolve Git merge conflicts in .xlsx/.xlsm planning or configuration tables (策划表/配置表冲突): run detect first; when reviewCount > 0 run launch and give the returned url to the user. Configured auto-theirs filters may resolve and commit matched generated workbooks without opening the UI. Do not inspect workbook cells or summarize diffs yourself; the resolver owns diff, choices, write-back and commit.
+
+**首次调用前必读**：`v-cli agent docs xlmerge`（插件包内 AGENTS.md 规范正本）
+**实时参数/命令**：`v-cli agent describe xlmerge --json`
+
+---
+
+所有清单字段的解释见 `schemas/v-cli-plugin.schema.json` 与 `v-cli agent describe` 输出。
+
+## 结果验证
+
+执行状态、任务生命周期和业务验收分别判断；未知结果不能视为成功。
+
+## 参考资料
+
+使用 -cli --help 与 -cli agent docs 查阅使用规范。
+
+## 许可与版权
+
+MIT。Copyright © 2026 Vant。

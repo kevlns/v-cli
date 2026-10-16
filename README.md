@@ -1,26 +1,33 @@
-# v-cli
+# Vant 工具命令入口
 
-个人开发工具的统一命令入口与结构化能力执行基座。提供命令发现、官方插件路由、工程绑定、可验证的执行句柄和本地操作证据；Vant 组织层负责调度与资源授权。
+`@kevlns/v-cli`
 
-需要 Node.js >=20；插件可能要求更高 Node 版本或特定系统，以实际包 engines 和发现结果为准。Unity、Figma 官方命令当前仅支持 Windows。
+## 功能
 
-## 安装与发现
+提供工具发现、插件路由、工程绑定、结构化能力执行和操作证据管理。
+
+## 环境要求
+
+Node.js 20 及以上；各工具的系统要求由插件清单和实际检测结果提供。
+
+## 安装
 
 ```sh
 npm install -g @kevlns/v-cli
+```
+
+## 快速开始
+
+```sh
 v-cli doctor
 v-cli plugin list --json
 v-cli agent index --json
 v-cli agent docs
-v-cli agent describe art --json
-v-cli agent docs art
 ```
 
-命令有 builtin、local、official 三类。官方 art、unity、figma、ship、xlmerge 随依赖安装；缺失或无效时明确报告，不在运行时偷偷安装。依赖版本范围以 package.json/lockfile 为准，实际工具版本用 doctor 与 agent index 查看，不另维护手工版本表。
+## 使用说明
 
-本地插件位于 `<V_CLI_HOME 或 <VANT_HOME 或 ~/.vant>/tools/v-cli>/commands`。单个插件加载失败会报告诊断，不阻断其他命令。全局结果走 stdout，诊断走 stderr。
-
-## 两种执行入口
+### 两种执行入口
 
 | 入口 | 职责 |
 | --- | --- |
@@ -29,7 +36,7 @@ v-cli agent docs art
 
 插件路由不会解析或改写插件输出；插件自己的 --help/--json 原样传入。结构化 provider 当前为 unity、figma、art；ship 和 xlmerge 有官方命令入口，不代表它们已注册 capability。完整集合以 live describe 为准。
 
-## 工程与结构化执行
+### 工程与结构化执行
 
 ```sh
 v-cli project init --project .
@@ -48,7 +55,7 @@ run 接受 --input JSON、--input-file FILE 和 --set k=v，按文件 → 内联
 
 默认每次调用记录到 `.vant/state/operations/<operationId>`，包含脱敏输入、事件、stdout/stderr 和结果。显式 --operation-id 必须唯一，不能覆盖；--no-persist 会失去原操作证据，不适合后续按句柄控制的生产启动。
 
-## 生命周期与结果
+### 生命周期与结果
 
 | 字段 | 含义 |
 | --- | --- |
@@ -69,7 +76,7 @@ v-cli capability run unity.test-query --project . --input-file query.json --json
 
 query.json 应包含完整的 handle 字段；不要手工伪造。每次查询使用新的 operationId。无参 compile-status/test-status 只是最近一次或当前状态观察，不能用来证明某个启动任务完成。unknown_run、缺少证据或身份失配不得回退最近任务。Unity runId 支持要求实际工具和工程适配包就绪；doctor 前置检查不可跳过。
 
-## 美术工坊
+### 美术工坊
 
 先读取 `v-cli agent docs art`。art 工具拥有工程风格/任务、模型登记、生成策略、后台运行、停止证据及候选定版；v-cli art provider 负责结构化路由和句柄关联，不维护第二份型号目录。
 
@@ -86,7 +93,7 @@ v-cli capability describe art.run-resume --json
 
 远程图片用 art 协议适配器，当前为 DashScope；视觉分析连接独立。模型可发现不等于已启用、已适配或账号有权调用。认证只从受控连接注入，不放入工程、输入文件、argv 或日志。详细限制由 art 的随包指南负责。
 
-## 其他官方插件
+### 其他官方插件
 
 | 命令 | 使用范围与边界 |
 | --- | --- |
@@ -97,7 +104,7 @@ v-cli capability describe art.run-resume --json
 
 每个插件首调先读 agent docs，再 describe。不要将插件执行成功当作引擎运行、平台发布或美术产物已完成。
 
-## Agent 文档与技能
+### Agent 文档与技能
 
 ```sh
 v-cli agent init . --dry-run --json
@@ -106,7 +113,7 @@ v-cli agent init .
 
 agent init 将随包 AGENTS.md 和技能装配到目标目录下已有的匹配 Agent 技能根。AGENTS.md 已存在时默认整体拒绝；--force 覆盖并完全同步随包技能，先核对目标。默认保留随包没有的项目扩展；同名随包技能文件以随包版本为准。组织层任务历史与资源租约不由此命令管理。
 
-## 本地插件与 SDK
+### 本地插件与 SDK
 
 本地插件是可信本地代码，不是沙箱。最小模块示例：
 
@@ -133,7 +140,7 @@ import {
 
 公开出口是 dist/sdk.mjs 与 dist/sdk.d.ts，对应 src/sdk.ts；核心不 import providers，默认装配在 src/default-registry.ts。传入完整 providers 集合会替换默认集合。资源声明不等于锁；SDK authorize 由组织层注入，未注入时报告 not-enforced。内核不自动重试生成或触发。
 
-## 环境与开发
+### 环境与开发
 
 | 变量 | 用途 |
 | --- | --- |
@@ -157,3 +164,21 @@ AGENTS.md 从生成源和实际解析的插件清单生成，禁止手改。优�
 [架构规范](docs/registration-execution.md) · [身份矩阵](docs/execution-identities.md) · [协议解释](docs/provider-protocols.md) · [扩展与验证](docs/provider-development.md)
 
 MIT，见 [LICENSE](LICENSE)。问题反馈：[GitHub Issues](https://github.com/kevlns/v-cli/issues)。
+
+## 开发与验证
+
+```sh
+npm ci
+npm run check
+npm run test:package
+```
+
+命令返回、结构校验、模拟测试与外部平台实际运行分别核验。发布版本和依赖以随包 `package.json` 为准。
+
+## 文档
+
+[Agent 调用规范](AGENTS.md) · [文档规范](docs/documentation.md) · [执行身份与生命周期](docs/execution-identities.md) · [Provider 扩展与维护](docs/provider-development.md) · [Provider 协议解释](docs/provider-protocols.md) · [注册与执行架构](docs/registration-execution.md)
+
+## 许可与版权
+
+本工具采用 [MIT 许可](LICENSE)。Copyright © 2026 Vant。Vant 为工具集品牌；Figma、Unity、Steam、微信及其组件归各自权利人所有，第三方组件适用各自许可。

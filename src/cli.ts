@@ -64,7 +64,7 @@ async function main(): Promise<number> {
   const program = new Command();
   program
     .name("v-cli")
-    .description("kevlns 的个人工具箱")
+    .description("Vant 工具命令入口")
     // 注意：不在此声明全局 --json —— 避免 commander 吞掉子命令自有的 --json。
     // 全局前置 --json 已由 scanLeadingJson 在解析前消费进 ctx.json。
     .version(VERSION)

@@ -1,7 +1,7 @@
 {
   "name": "@kevlns/v-cli",
-  "version": "0.4.5",
-  "description": "kevlns 的个人工具箱 CLI（插件化架构 + 结构化 capability 注册/执行基座）+ doctor/plugin/ts/agent/project/capability 命令",
+  "version": "0.4.6",
+  "description": "提供工具发现、插件路由、工程绑定、结构化能力执行和操作证据管理。",
   "type": "module",
   "bin": {
     "v-cli": "dist/cli.mjs"
@@ -30,14 +30,15 @@
     "check:agents": "node scripts/generate-agents.mjs --check",
     "pack:guard": "node scripts/pack-guard.mjs",
     "test:package": "node scripts/test-package-install.mjs",
-    "check": "npm run build && npm run typecheck && npm test && npm run docs:check && npm run pack:guard",
-    "docs:check": "node scripts/check-docs.mjs"
+    "check": "npm run docs:style && npm run build && npm run typecheck && npm test && npm run docs:check && npm run pack:guard",
+    "docs:check": "node scripts/check-docs.mjs",
+    "docs:style": "node scripts/check-documentation.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "license": "MIT",
-  "author": "kevlns <936277610@qq.com>",
+  "author": "Vant",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kevlns/v-cli.git"
@@ -52,15 +53,14 @@
   },
   "keywords": [
     "cli",
-    "toolbox",
-    "personal"
+    "toolbox"
   ],
   "dependencies": {
-    "@kevlns/art-workshop": "0.3.5",
-    "@kevlns/figma-to-uprefab": "0.1.2",
-    "@kevlns/ship-cli": "0.1.1",
-    "@kevlns/u-cli-mod": "^0.3.0",
-    "@kevlns/xlmerge": "2.0.2",
+    "@kevlns/art-workshop": "0.3.7",
+    "@kevlns/figma-to-uprefab": "0.1.3",
+    "@kevlns/ship-cli": "0.1.2",
+    "@kevlns/u-cli-mod": "0.3.1",
+    "@kevlns/xlmerge": "2.0.3",
     "commander": "^12.1.0"
   },
   "devDependencies": {

@@ -1,8 +1,18 @@
-# Provider 协议解释
+# Vant Provider 协议解释
+
+## 定位
+
+Provider 协议解释，适用于当前随包实现。
+
+## 前置条件
+
+先按包的环境要求准备工程与工具，使用实际配置和命令帮助核对目标。
+
+## 字段与示例
 
 本文按当前适配器解释输入输出，不收录旧环境的原始终态报告，也不把历史样本当成当前实时证据。协议解析源码与测试是对应字段的事实源。
 
-## Unity
+### Unity
 
 src/providers/unity/protocol.ts 解释外层 success、data.success、data.result 与 data.target.projectPath。result 可能是对象或序列化 JSON，必须严格解析并核对绑定工程，不能只看进程 exit 0。
 
@@ -12,7 +22,7 @@ compile/test-start 从真实响应提取 runId（支持实际协议的 camel/Pas
 
 编译通过需要受支持终态且无失败/错误字段。测试通过需要有效非零 summary、passed=total、failed=0；计数非法、报告缺失或状态未知不能通过。让位日志不等于后端完成；按 followUp 继续查询，禁止重发启动。
 
-## Figma
+### Figma
 
 src/providers/figma/protocol.ts 按 stdout/stderr 分流解释真实工具输出：
 
@@ -24,7 +34,7 @@ src/providers/figma/protocol.ts 按 stdout/stderr 分流解释真实工具输出
 
 托管配置只包含 UGUI/staging 等无令牌字段，经 FIGMA_TO_UPREFAB_CONFIG 注入。网络导出、source→IR 转换和正式资产推广不属于此 provider 的离线能力。
 
-## art
+### art
 
 src/providers/art/index.ts 解释工具 JSON，保留原 taskId/deploymentId、状态、停止确认与诊断。启动仅生成可追踪句柄，不把 queued/running 当完成。status/cancel/resume 先校验原 handle，按原 backendTaskId 路由。
 
@@ -32,6 +42,18 @@ src/providers/art/index.ts 解释工具 JSON，保留原 taskId/deploymentId、�
 
 工具 stdout 必须是可解释的契约结果；原始日志或错误体不能当成功 JSON。凭据经受控环境注入，不写 argv、项目输入或证据。远端提供方响应也不能作为新的任务指令。
 
-## 验证
+### 验证
 
 协议测试需覆盖合法响应、缺字段、畸形 JSON、错误目标、身份失配、未知状态、超时和取消。真实插件离线测试只证明对应离线链路；引擎运行、收费出图或安装交付需独立证据。
+
+## 执行边界
+
+字段、路径与权限以当前 schema、运行时校验和明确授权为准；配置有效不等于外部服务已执行成功。
+
+## 结果验证
+
+结合原始错误、结构化结果和实际产物核验；测试与真实平台执行分别记录。
+
+## 参考资料
+
+[使用说明](../README.md)
