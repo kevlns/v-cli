@@ -139,6 +139,7 @@ const definitions: Definition[] = [
     required: ["id", "revision"],
     start: true,
   },
+  {id:"style-resolve",command:["style","resolve"],fields:objectFields,required:["id","revision","input"]},
   {
     id: "style-adopt",
     command: ["style", "adopt"],

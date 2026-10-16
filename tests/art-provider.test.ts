@@ -18,6 +18,18 @@ const config = {
   },
 };
 describe("art controlled execution and lifecycle", () => {
+  it("routes a style decision through the same controlled project and revision boundary",async()=>{
+    const project=makeTempProject({config,withProjectVersion:false}),executor=new FakeExecutor(()=>({stdout:JSON.stringify({id:"style-a",revision:2,review:{ready:true}})})),registry=new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+    try{
+      writeFileSync(join(project.root,"decision.json"),JSON.stringify({issueId:"shadow",optionId:"flexible",note:"用户确认"}));
+      const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-resolve",input:{id:"style-a",revision:1,input:"decision.json"}});
+      expect(result.execution.status).toBe("succeeded");expect(executor.calls).toHaveLength(1);
+      expect(JSON.stringify(executor.calls[0])).toContain("resolve");
+      const invalid=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-resolve",input:{id:"style-a",input:"decision.json"}});
+      expect(invalid.execution.status).toBe("failed");expect(executor.calls).toHaveLength(1);
+    }finally{project.cleanup();}
+  });
   it("publishes only drawing reference categories and rejects removed shape classification before execution", async () => {
     const project=makeTempProject({config,withProjectVersion:false}),executor=new FakeExecutor(()=>({stdout:"{}"})),registry=new CapabilityRegistry();
     registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend()}));
