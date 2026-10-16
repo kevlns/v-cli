@@ -278,11 +278,28 @@ export function discoverOfficialPlugin(
     };
   }
 
+  const metadata = {
+    whenToUse: manifest.agent.whenToUse,
+    globalOptions: manifest.agent.globalOptions,
+    commands: manifest.agent.commands.map((c) => ({
+      path: c.path,
+      usage: c.usage,
+      description: c.description,
+      arguments: c.arguments,
+      options: c.options,
+      output: c.output,
+      exitCodes: c.exitCodes,
+      safety: c.safety,
+    })),
+    runtime: manifest.runtime,
+    environment: manifest.environment,
+  };
   const requiredPlatforms = manifest.platforms;
   if (!requiredPlatforms.includes(platform)) {
     return {
       ...base,
       status: "platform-mismatch",
+      ...metadata,
       version: typeof pkgJson.version === "string" ? pkgJson.version : undefined,
       requiredPlatforms,
       error: `该插件仅支持平台 [${requiredPlatforms.join(", ")}]，当前平台为 ${platform}`,
@@ -304,20 +321,7 @@ export function discoverOfficialPlugin(
     version: typeof pkgJson.version === "string" ? pkgJson.version : undefined,
     requiredPlatforms,
     bin: binPath,
-    whenToUse: manifest.agent.whenToUse,
-    globalOptions: manifest.agent.globalOptions,
-    commands: manifest.agent.commands.map((c) => ({
-      path: c.path,
-      usage: c.usage,
-      description: c.description,
-      arguments: c.arguments,
-      options: c.options,
-      output: c.output,
-      exitCodes: c.exitCodes,
-      safety: c.safety,
-    })),
-    runtime: manifest.runtime,
-    environment: manifest.environment,
+    ...metadata,
   };
 }
 
