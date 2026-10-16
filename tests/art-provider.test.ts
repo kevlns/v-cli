@@ -48,7 +48,7 @@ describe("art controlled execution and lifecycle", () => {
       expect(sync.execution.status).toBe("failed");expect(sync.execution.lifecycle).not.toBe("unknown");
       mkdirSync(join(project.root,".vant/art"),{recursive:true});writeFileSync(join(project.root,".vant/art/plan.json"),JSON.stringify({project:"project",module:"generate"}));
       const background=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.generate-start",input:{plan:".vant/art/plan.json"}});
-      expect(background.execution.status).toBe("failed");expect(background.execution.lifecycle).toBe("unknown");
+      expect(background.execution.status).toBe("failed");expect(background.execution.lifecycle,JSON.stringify(background)).toBe("unknown");
     }finally{project.cleanup();}
   });
   it("preserves structured tool rejection without inventing an uncertain background run",async()=>{

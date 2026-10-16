@@ -1,3 +1,5 @@
+import { unityCommandRegistrations } from "./commands";
+import { PIPELINE_COMMANDS } from "./catalog";
 /**
  * Unity provider（首个 provider）：把已安装的 @kevlns/u-cli-mod 包能力
  * 包装成结构化 capability，受控 argv 调用（无 shell 拼接），
@@ -307,6 +309,7 @@ const TRIGGER_RETRY = {
 };
 
 const EXEC_RESOURCES = [
+  {kind:"user-cache" as const,key:"unity",mode:"shared" as const,scope:"machine" as const,description:"执行期间保留已校验工具缓存"},
   {
     kind: "engine-editor" as const,
     mode: "exclusive" as const,
@@ -322,6 +325,7 @@ const EXEC_RESOURCES = [
 ];
 
 const READONLY_RESOURCES = [
+  {kind:"user-cache" as const,key:"unity",mode:"shared" as const,scope:"machine" as const,description:"读取期间保留工具缓存"},
   {
     kind: "engine-editor" as const,
     mode: "shared" as const,
@@ -1907,6 +1911,35 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
     { id: "unity.handle-valid", description: "句柄通过内核校验（身份一致 + 落盘证据回读；触发能力匹配）" },
   ];
 
+  const dedicatedPipelineCommands = new Set(["editor_status", "recompile", "recompile_status", "run_tests", "test_status", "cancel_tests"]);
+  const pipelineParametersCheck: PreconditionChecker = (input) => {
+    const parameters = input.parameters as Record<string, unknown> | undefined;
+    const invalid = Object.entries(parameters ?? {}).some(([key, value]) => !/^[a-z][a-z0-9_]*$/.test(key) || /project_?path/i.test(key) || value === undefined || value === null);
+    return { id: "unity.parameters-valid", status: invalid ? "violated" : "satisfied", detail: invalid ? "参数名非法或试图覆盖工程路径" : "结构化参数通过检查；具体参数契约由 Unity 工具校验" };
+  };
+  const pipelineRegistration: CapabilityRegistration = {
+    descriptor: {
+      id: "unity.command", commands: [["exec"]], version: "0.1.0", description: "执行已登记的 Unity Pipeline 工具；编译和测试使用专用句柄能力",
+      inputSchema: execInputSchema({ command: { type: "string", enum: Object.keys(PIPELINE_COMMANDS).filter(name => !dedicatedPipelineCommands.has(name)) }, parameters: { type: "object", additionalProperties: true } }, ["command"]),
+      outputSchema: { type: "object", required: ["result"], properties: { result: { type: "object", additionalProperties: true } }, additionalProperties: false },
+      preconditions: [...execPreconditions, { id: "unity.parameters-valid", description: "参数名称合法且不能覆盖绑定工程" }],
+      sideEffects: execSideEffects(true), resources: EXEC_RESOURCES, retry: { safe: false, maxAttempts: 1, strategy: "none", description: "不自动重放引擎操作" },
+    },
+    implementation: { preconditions: { ...execChecks, "unity.parameters-valid": pipelineParametersCheck }, execute: async (input, ctx) => {
+      const dir = findUnityDir(ctx)!;
+      const pipelineArgs = Object.entries((input.parameters ?? {}) as Record<string, unknown>).flatMap(([key, value]) => [`--${key}`, typeof value === "object" ? JSON.stringify(value) : String(value)]);
+      const waitSeconds = inputWaitSeconds(input, "unity.command");
+      const invoked = await invokeOrUnavailable(buildExecArgv({ projectDir: dir, waitSeconds, pipelineCommand: String(input.command), pipelineArgs }), ctx, waitSeconds, dir);
+      if (isOutcome(invoked)) return invoked;
+      const execution = executionFromProcess(invoked.outcome);
+      const parsed = interpretToolOutput(invoked.outcome.stdout);
+      const passed = execution.status === "succeeded" && parsed.success === true && !parsed.parseError && !parsed.payloadParseError;
+      return { execution: { ...execution, ...(!parsed.parseError && !parsed.payloadParseError ? {} : { lifecycle: "unknown" as const }) },
+        acceptance: { status: passed ? "passed" : "not-run", reason: passed ? "工具信封确认执行成功，具体产物见 result" : "工具未确认完成，不推断成功", evidence: [{ kind: "protocol-field", description: "Unity 工具原始结果", data: parsed.parsed }] },
+        output: { result: { command: input.command, data: parsed.payload } }, rawOutput: invoked.rawOutput, command: invoked.command, tool: invoked.toolInfo };
+    } },
+  };
+
   /* ------------------------------- 注册表 ------------------------------- */
 
   const registrations: CapabilityRegistration[] = [
@@ -2163,6 +2196,6 @@ export function createUnityProvider(deps: UnityProviderDeps): CapabilityProvider
             : ("missing" as const);
       return { state, detail: backend.detail };
     },
-    capabilities: () => registrations,
+    capabilities: () => [...registrations.map(r=>({...r,descriptor:{...r.descriptor,commands:[r.descriptor.id==="unity.doctor"?["doctor"]:["exec"]]}})), pipelineRegistration, ...unityCommandRegistrations(deps)],
   };
 }

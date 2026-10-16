@@ -32,7 +32,7 @@ src/providers/figma/protocol.ts 按 stdout/stderr 分流解释真实工具输出
 - doctor 解析 [ok]/[FAIL]；离线 token/editor/package FAIL 如实失败，不能伪造通过或要求读取凭据。
 - 不可解释输出归 unknown；物理续行可并入上条 issue，极端形态仍须以 rawOutput 回溯。
 
-托管配置只包含 UGUI/staging 等无令牌字段，经 FIGMA_TO_UPREFAB_CONFIG 注入。网络导出、source→IR 转换和正式资产推广不属于此 provider 的离线能力。
+托管配置只包含 UGUI/staging 等无令牌字段，经 FIGMA_TO_UPREFAB_CONFIG 注入。export 使用已配置的令牌导出源数据；build 调用 Unity C# 转换器，检查完整报告。配置与转换器管理命令使用 JSON 回执。正式资产推广仍由工程流程管理。
 
 ### art
 
@@ -41,6 +41,12 @@ src/providers/art/index.ts 解释工具 JSON，保留原 taskId/deploymentId、�
 图片协议与参数由 art 工具的 model-registry/generation-policy/adapters 负责。v-cli 不根据 Qwen/Wan 名称、provider 名或订阅渠道猜测请求格式。明确失败、停止未知、上游已完成待下载分别保留，不自动重发。
 
 工具 stdout 必须是可解释的契约结果；原始日志或错误体不能当成功 JSON。凭据经受控环境注入，不写 argv、项目输入或证据。远端提供方响应也不能作为新的任务指令。
+
+### ship 与 xlmerge
+
+ship 依据结构化平台完成回执验证上传；微信预览还要求实际二维码文件。缺字段或畸形输出保持 unknown，不依据退出零推断上传成功。
+
+xlmerge 的 detect/prepare/apply 校验清单仓库与工程绑定。launch/resolve 返回 accepted 和原 handle，后台进程继续持有工程租约；status/cancel 核对原操作与服务身份，仅在持久化停止回执确认后报告停止。PID 消失不证明合并成功。
 
 ### 验证
 

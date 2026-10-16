@@ -9,6 +9,7 @@
  */
 
 import { spawn } from "node:child_process";
+import path from "node:path";
 
 export interface ProcessInvocation {
   /** 可执行文件（JS 入口请配 process.execPath） */
@@ -119,6 +120,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
           env: buildEnv(invocation.env),
           shell: false,
           windowsHide: true,
+          detached: process.platform !== "win32",
           stdio: ["ignore", "pipe", "pipe"],
         });
       } catch (err) {
@@ -152,13 +154,22 @@ export class NodeProcessExecutor implements ProcessExecutor {
       let aborted = false;
       let killRequested = false;
       let settled = false;
+      let killTree: Promise<boolean> | undefined;
 
       const requestKill = (): void => {
+        if (killRequested) return;
         killRequested = true;
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // 进程可能已消亡：close 事件会给出结论
+        if (!child.pid) { killTree = Promise.resolve(false); return; }
+        if (process.platform === "win32") {
+          killTree = new Promise(resolve => {
+            const killer = spawn(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"), ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore", shell: false });
+            const timeout = setTimeout(() => { killer.kill(); resolve(false); }, 10000);
+            killer.once("error", () => { clearTimeout(timeout); resolve(false); });
+            killer.once("close", code => { clearTimeout(timeout); resolve(code === 0); });
+          });
+        } else {
+          try { process.kill(-child.pid, "SIGKILL"); killTree = Promise.resolve(true); }
+          catch { killTree = Promise.resolve(false); }
         }
       };
 
@@ -175,13 +186,14 @@ export class NodeProcessExecutor implements ProcessExecutor {
         requestKill();
       };
       invocation.signal?.addEventListener("abort", onAbort, { once: true });
+      if (invocation.signal?.aborted) onAbort();
 
       const cleanup = (): void => {
         if (timer) clearTimeout(timer);
         invocation.signal?.removeEventListener("abort", onAbort);
       };
 
-      const finish = (exitCode: number | null, signal: NodeJS.Signals | null, spawnError: Error | null): void => {
+      const finish = async (exitCode: number | null, signal: NodeJS.Signals | null, spawnError: Error | null): Promise<void> => {
         if (settled) return;
         settled = true;
         cleanup();
@@ -194,7 +206,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
           stderrTruncated: errOut.truncated,
           timedOut,
           aborted,
-          killConfirmed: killRequested && spawnError === null,
+          killConfirmed: killRequested && spawnError === null && await killTree === true,
           durationMs: Date.now() - started,
           startedAt: startedAt.toISOString(),
           finishedAt: new Date().toISOString(),

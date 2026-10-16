@@ -80,9 +80,30 @@ type Definition = {
   start?: boolean;
   control?: boolean;
   network?: boolean;
+  text?: boolean;
+  positional?: string[];
+  global?: boolean;
 };
 const objectFields = { id: identifier, revision, input: file };
 const definitions: Definition[] = [
+  {id:"help",command:["help"],fields:{},readonly:true,text:true,global:true},
+  ...["path","show","init","validate"].map((action):Definition=>({id:"config-"+action,command:["config",action],fields:{},readonly:action!=="init",text:action==="path",global:true})),
+  {id:"refs-guide",command:["refs","guide"],fields:{},readonly:true,text:true,global:true},
+  {id:"agent-index",command:["agent","index"],fields:{},readonly:true,global:true},
+  {id:"agent-docs",command:["agent","docs"],fields:{},readonly:true,text:true,global:true},
+  {id:"agent-init",command:["agent","init"],fields:{directory:file,dry:{type:"boolean"}},required:["directory"],global:true},
+  {id:"list",command:["list"],fields:{},readonly:true,global:true},
+  {id:"style-validate",command:["style","validate"],fields:{report:file},readonly:true},
+  {id:"style-show",command:["style","show"],fields:{core:identifier},readonly:true},
+  ...["generate","edit"].map((kind):Definition=>({id:kind+"-show",command:[kind,"show"],fields:{job:identifier},required:["job"],readonly:true})),
+  {id:"check",command:["check"],fields:{run:file},required:["run"],positional:["run"],readonly:true,global:true},
+  {id:"compare",command:["compare"],fields:{before:file,after:file},required:["before","after"],positional:["before","after"],readonly:true,global:true},
+  {id:"run-wait",command:["task","wait"],fields:{handle:{type:"object",additionalProperties:true},timeout:{type:"integer",minimum:1,maximum:60}},required:["handle"],control:true,readonly:true},
+  {id:"shutdown",command:["shutdown"],fields:{},network:true,global:true},
+  {id:"doctor",command:["doctor"],fields:{backend:identifier,start:{type:"boolean"}},network:true,global:true},
+  {id:"workflow-list",command:["workflow","list"],fields:{},readonly:true,global:true},
+  {id:"project-upgrade",command:["project","upgrade"],fields:{dry:{type:"boolean"},mapping:file}},
+
   {id:"job-template",command:["job","template"],fields:{kind:{type:"string",enum:["generate","edit"]},core:identifier},required:["kind"],readonly:true},
   {id:"job-from-candidate",command:["job","from-candidate"],fields:{id:identifier,run:identifier,candidate:{type:"string",pattern:"^[a-f0-9]{64}$"}},required:["id","run","candidate"]},
   {id:'deployment-plan',command:['deployment','plan'],fields:{directory:{type:'string',minLength:1},endpoint:{type:'string',minLength:1}},required:['directory'],readonly:true},
@@ -261,6 +282,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
   const registrations: CapabilityRegistration[] = definitions.map((d) => ({
     descriptor: {
       id: "art." + d.id,
+      commands: [d.command],
       version: "0.1.0",
       description:
         "美术工坊 " + d.command.join(" ") + "；对象版本与停止证据由工具核验",
@@ -362,7 +384,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
           "--config",
           path.join(ctx.bindingDirs.workspace, "settings.json"),
         ];
-        if (!d.control && !(d.command[1] === "run" && input.plan))
+        if (!d.global && !d.control && !(d.command[1] === "run" && input.plan))
           argv.push("--project", String(ctx.binding.projectId));
         if (d.control) {
           const verification = verifyExecutionHandle({
@@ -378,9 +400,11 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
           if(origin.output?.result?.project!==ctx.binding.projectId||["workspace","output","cache"].some(key=>origin.project?.bindingDirs?.art?.[key]!==ctx.bindingDirs?.[key]))return fail("art-handle-binding-changed","运行身份与当前工程绑定不同；请恢复原绑定后操作");
           argv.splice(2, 0, verification.record.backendTaskId);
         }
+        if (d.id === "run-wait" && input.timeout === undefined) argv.push("--timeout", "30");
+        for (const key of d.positional ?? []) argv.push(resolveInsideProject(ctx.projectAnchor,String(input[key]),"art."+key).path);
         for (const [key, value] of Object.entries(input)) {
-          if (key === "handle" || value === false) continue;
-          const actual = ["input", "source", "plan", "out"].includes(key)
+          if (key === "handle" || d.positional?.includes(key) || value === false) continue;
+          const actual = ["input", "source", "plan", "out", "report", "mapping", ...(d.id==="agent-init"?["directory"]:[])].includes(key)
             ? resolveInsideProject(
                 ctx.projectAnchor,
                 String(value),
@@ -403,7 +427,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
         });
         let output: Record<string, unknown>;
         try {
-          const parsed = JSON.parse(outcome.stdout);
+          const parsed = d.text ? {text:outcome.stdout} : JSON.parse(outcome.stdout);
           output = Array.isArray(parsed) ? { items: parsed } : parsed;
           if (!output || typeof output !== "object") throw new Error();
         } catch {

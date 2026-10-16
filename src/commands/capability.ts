@@ -1,3 +1,4 @@
+import { capabilityCoverage } from "../capability-coverage";
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
@@ -13,6 +14,7 @@ const CAPABILITY_HELP_TEXT = [
   "capability：结构化能力注册与执行（v-cli 是注册和执行基座）。",
   "",
   "  list      列出已注册 capability（provider 状态只做发现，不执行工具）",
+  "  coverage  核对官方命令的能力覆盖",
   "  describe  查看单个 capability 的完整描述（id/版本/schema/前置条件/副作用/资源/重试）",
   "  run       执行 capability（真实输入/输出校验；落盘到 .vant/state/operations）",
   "",
@@ -66,7 +68,7 @@ function describeLines(row: CapabilitySummary, full: Record<string, unknown>): s
   const resources = full.resources as { kind: string; mode: string; scope: string; description: string }[];
   lines.push(
     resources.length > 0
-      ? `资源需求（声明；授权由组织层注入，本阶段无资源锁）:\n${resources
+      ? `资源需求（内核跨进程互斥；权限由组织层授权）:\n${resources
           .map((r) => `  - ${r.kind} ${r.mode}/${r.scope} — ${r.description}`)
           .join("\n")}`
       : "资源需求: 无",
@@ -192,7 +194,7 @@ export function applySetPairs(
 /** capability：注册表只读浏览 + 结构化执行 */
 export const capability: CliCommand = {
   name: "capability",
-  description: "capability：list 列能力，describe 看契约，run 结构化执行（含真实输入/输出校验与落盘记录）",
+  description: "capability：list 列能力，describe 看契约，coverage 查覆盖，run 结构化执行（含真实输入/输出校验与落盘记录）",
   apiVersion: 1,
 
   agent: {
@@ -203,6 +205,7 @@ export const capability: CliCommand = {
       "退出码 3 表示验收 not-run（异步启动/需轮询 followUp），不得当作通过",
     globalOptions: [{ flags: "-h, --help", description: "显示命令帮助" }],
     commands: [
+      { path:["coverage"],usage:"v-cli capability coverage --json",description:"核对所有官方命令的能力覆盖",arguments:[],options:[{flags:"--json",description:"输出 JSON"}],output:{format:"json",description:"逐插件的命令与 capability 对照，缺失时 ok=false"},exitCodes:{"0":"覆盖完整","1":"存在缺失或工具不可发现"},safety:["read-only","no-tool-execution"] },
       {
         path: ["list"],
         usage: "v-cli capability list [--provider <id>] [--json]",
@@ -267,6 +270,11 @@ export const capability: CliCommand = {
   },
 
   register(program: Command, ctx: CliContext) {
+    program.command("coverage").description("核对官方命令的结构化能力覆盖").option("--json", "输出 JSON").action(() => {
+      const result = capabilityCoverage(createDefaultRegistry());
+      ctx.log.result(result);
+      if (!result.ok) process.exitCode = 1;
+    });
     program
       .command("list")
       .description("列出已注册 capability（provider 状态为只读发现，不执行工具）")

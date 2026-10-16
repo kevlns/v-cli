@@ -23,7 +23,7 @@ description: 使用 v-cli 发现和执行工程能力，路由 Unity、Figma、�
 
 ### 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.4.6
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.4.7
 - 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
   **命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
@@ -33,12 +33,13 @@ description: 使用 v-cli 发现和执行工程能力，路由 Unity、Figma、�
   随包版本是规范唯一权威：同名 SKILL.md 一律按随包版本刷新（本地修改会被覆盖并提示）；随包没有的文件（项目扩展，如 PROJECT.md）默认保留，`--force` 时完全同步
 - 工程执行基座（内置命令）：`v-cli project init|inspect` 管理工程根绑定 `.vant/config/v-cli.json`
   （该文件只写 CLI 能力/适配器绑定；角色/workflow/项目组织属于 Vant 的 `.vant/config/project.json`，v-cli 既不读也不写）；
-  `v-cli capability list|describe|run` 列出/查看/执行结构化 capability（稳定 id、输入输出 schema、前置条件、声明的副作用、资源需求、重试语义）
+  `v-cli capability list|describe|coverage|run` 列出/查看/执行结构化 capability（稳定 id、输入输出 schema、前置条件、声明的副作用、资源需求、重试语义）
+- 所有官方命令都登记能力映射；`capability coverage --json` 检查遗漏。内核执行跨进程共享/独占资源租约；权限授权与资源互斥分开，后台审阅进程确认退出前继续占用资源。
 - capability run 的语义：工程根用 `--project` 显式锚定；输入由配置绑定（不接受 projectPath 等覆盖）；
   **执行状态与验收状态分离**——工具进程退出码 0 不等于业务通过，capability 退出码 0 只在验收 passed 时出现（1=执行/验收失败，2=未执行，3=已执行但验收 not-run 需按 followUp 轮询，4=已确认取消，5=结果未知）；
   每次执行在 `<工程根>/.vant/state/operations/<operationId>/` 保存输入摘要、事件与结果证据（本地记录，不是任务队列；`--no-persist` 可关闭）；
   **lifecycle 是任务级六态**（accepted/running/completed/failed/cancelled/unknown；unknown=不可解释/不可知，绝不升级）；异步触发在结果 `handle` 中返回可序列化执行句柄——查询/取消类能力以 `input.handle` 传入并用内核校验（落盘证据回读，失败明确拒绝不回退最近任务）；Unity 后端提供 runId：`unity.compile`/`unity.test-start` 句柄的 backendTaskId=runId，用 `unity.compile-query`/`unity.test-query`/`unity.test-cancel-run` 按句柄关联查询/定向取消（关联失效=后端 unknown_run，明确 failed 不采信其他任务记录）
-- 默认结构化 provider 为 unity、figma、art；先 `v-cli capability describe <id> --json` 读契约，受控 argv 调用不拼 shell；
+- 默认结构化 provider 为 unity、figma、art、ship、xlmerge；先 `v-cli capability describe <id> --json` 读契约，受控 argv 调用不拼 shell；
   figma provider（`@kevlns/figma-to-uprefab`，离线）：`figma.contract` 校验 staging 契约（roots>0 才通过）、`figma.doctor` 只读诊断——v-cli 注入无令牌托管配置，无网络、不碰凭据；
   exec 类能力默认自动跑一次 doctor 核对就绪判据（不得跳过）；`unity.compile`/`unity.test-start` 是异步触发，只报告 accepted，按原 handle 轮询 `unity.compile-query`/`unity.test-query`；无参 status 只观察当前/最近槽位；测试 completed、有效非零报告且全部用例通过才 passed
 - **首调规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，
@@ -52,7 +53,7 @@ description: 使用 v-cli 发现和执行工程能力，路由 Unity、Figma、�
 
 ### @kevlns/art-workshop — 命令 `v-cli art …`
 
-**版本**：0.3.7
+**版本**：0.3.8
 **描述**：管理项目风格、参考图、图片生成、编辑和定版。支持本地 ComfyUI 与远程图片模型。
 **平台**：win32, linux, darwin
 
@@ -63,7 +64,7 @@ description: 使用 v-cli 发现和执行工程能力，路由 Unity、Figma、�
 
 ### @kevlns/figma-to-uprefab — 命令 `v-cli figma …`
 
-**版本**：0.1.3
+**版本**：0.1.4
 **描述**：将 Figma 标记画板导出为源数据和图片，通过 Unity 转换器生成 UGUI 预制体。
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
@@ -96,7 +97,7 @@ description: 使用 v-cli 发现和执行工程能力，路由 Unity、Figma、�
 
 ### @kevlns/xlmerge — 命令 `v-cli xlmerge …`
 
-**版本**：2.0.3
+**版本**：2.0.4
 **描述**：在浏览器中审阅 Git 冲突工作簿的三方差异，校验后写回并提交合并结果。
 **平台**：darwin, linux, win32
 
@@ -115,7 +116,7 @@ description: 使用 v-cli 发现和执行工程能力，路由 Unity、Figma、�
 
 ## 参考资料
 
-使用 -cli --help 与 -cli agent docs 查阅使用规范。
+使用 v-cli --help 与 v-cli agent docs 查阅使用规范。
 
 ## 许可与版权
 

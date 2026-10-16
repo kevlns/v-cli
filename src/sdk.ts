@@ -164,3 +164,5 @@ export { REDACTION_PLACEHOLDER, redactArgv, redactSecrets } from "./core/project
 export { VERSION } from "./version";
 
 export {createArtProvider,artBindingContract,type ArtProviderDeps} from './providers/art';
+
+export { capabilityCoverage } from "./capability-coverage";

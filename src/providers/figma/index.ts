@@ -1,18 +1,8 @@
+import { figmaCommandRegistrations } from "./commands";
 /**
- * Figma provider（阶段 E）：把已安装的 @kevlns/figma-to-uprefab 的离线
- * staging contract 校验与只读诊断包装成结构化 capability。
- *
- * 边界（计划 §8，硬约束）：
- * - 只做离线验证：contract/doctor 全程无网络，不调用任何 Figma REST/收费接口。
- * - 不做 source→IR 转换、不推广生成资产到生产路径、不修改 UIConfig。
- * - 不读取也不输出 Figma 凭据：经 v-cli 托管配置注入 uiSystem/staging（无令牌字段），
- *   验证过程不要求配置访问令牌（doctor 对 token 的 [FAIL] 如实报告，不作为通过条件）。
- * - 路径边界：projectDir/stagingRoot 为绑定路径字段（核心强核对：相对工程根、
- *   越界/链接在执行前拒绝）；staging 内容的资产越界由插件自身 fail-closed（CON_/PAT_ 码族）。
- *
- * 托管配置（阶段 A 实证的路线）：每次执行生成 .vant/state/figma/user-config.json
- * （projects 键 = Unity 工程绝对路径的规范化形式，与工具 normalizeProjectKey 一致：
- * 正斜杠 + win32 小写），经 env FIGMA_TO_UPREFAB_CONFIG 指给插件——不触碰用户真实配置。
+ * Figma 结构化适配：doctor/contract 使用无凭据的托管配置进行离线核对；
+ * 配置、导出、转换器管理与构建使用工具的 JSON 回执。
+ * 目标路径来自工程绑定，源数据到 IR 与预制体的转换由 Unity C# 工具完成。
  */
 
 import fs from "node:fs";
@@ -627,6 +617,6 @@ export function createFigmaProvider(deps: FigmaProviderDeps): CapabilityProvider
             : ("missing" as const);
       return { state, detail: backend.detail };
     },
-    capabilities: () => registrations,
+    capabilities: () => [...registrations.map(r=>({...r,descriptor:{...r.descriptor,commands:[[r.descriptor.id.slice(6)]]}})), ...figmaCommandRegistrations(deps)],
   };
 }

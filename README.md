@@ -34,7 +34,7 @@ v-cli agent docs
 | v-cli art / unity / figma / ship / xlmerge | 插件子进程路由；参数和输出属于原工具 |
 | v-cli capability list / describe / run | 结构化契约、绑定、前置条件、授权、证据和退出码 |
 
-插件路由不会解析或改写插件输出；插件自己的 --help/--json 原样传入。结构化 provider 当前为 unity、figma、art；ship 和 xlmerge 有官方命令入口，不代表它们已注册 capability。完整集合以 live describe 为准。
+插件路由不会解析或改写插件输出；插件自己的 --help/--json 原样传入。五个官方插件均通过 capability 提供结构化调用、输入输出校验、资源互斥与执行记录。`v-cli capability coverage --json` 核对公开命令覆盖；具体契约以 `describe` 为准。
 
 ### 工程与结构化执行
 

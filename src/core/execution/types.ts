@@ -127,7 +127,7 @@ export interface SideEffectRecord {
   details?: Record<string, unknown>;
 }
 
-/** 资源需求（声明 + 组织层注入授权；本阶段内核不实现资源锁） */
+/** 资源需求（内核跨进程共享/独占租约 + 组织层权限授权） */
 export type ResourceKind =
   | "project-workspace"
   | "engine-editor"
@@ -138,6 +138,8 @@ export type ResourceKind =
 export type ResourceMode = "exclusive" | "shared";
 
 export interface ResourceRequirement {
+  /** 同类资源的稳定名称，例如 unity 工具缓存；省略表示该类公共资源。 */
+  key?: string;
   kind: ResourceKind;
   mode: ResourceMode;
   scope: "project" | "machine";
@@ -155,6 +157,8 @@ export interface RetrySemantics {
 }
 
 export interface CapabilityDescriptor {
+  /** 对应官方工具的命令路径；用于完整覆盖审计。 */
+  commands?: string[][];
   /** 稳定 capability id，必须带 provider 命名空间前缀（如 unity.compile） */
   id: string;
   /** 语义化版本，如 "0.1.0" */
@@ -356,6 +360,8 @@ export interface CapabilityExecutionContext {
 
 /** 实现返回的结构化结果（内核补全 project/时间/日志/持久化等字段） */
 export interface ImplementationOutcome<Out = unknown> {
+  /** 已由工具回执确认的后台进程；调用结束后由其继续持有资源租约。 */
+  resourceOwnerPid?: number;
   execution: {
     status: ExecutionStatus;
     lifecycle: ExecutionLifecycle;
@@ -477,6 +483,6 @@ export interface CapabilitySummary {
   tags: string[];
   preconditions: string[];
   sideEffectKinds: SideEffectKind[];
-  resources: { kind: ResourceKind; mode: ResourceMode; scope: ResourceRequirement["scope"] }[];
+  resources: { key?: string; kind: ResourceKind; mode: ResourceMode; scope: ResourceRequirement["scope"] }[];
   retry: RetrySemantics;
 }

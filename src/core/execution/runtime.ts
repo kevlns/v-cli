@@ -13,6 +13,7 @@
  *   属于请求级失败：抛 CapabilityError（CLI 输出稀疏错误对象，退出码 2）。
  */
 
+import { acquireResources, type ResourceLease } from "./resource-locks";
 import {
   CapabilityError,
   structuredError,
@@ -56,7 +57,7 @@ export interface CapabilityRunRequest {
   /** false = 不落盘模式（测试/SDK 探测）；默认 true */
   persist?: boolean;
   signal?: AbortSignal;
-  /** 组织层注入的资源授权校验（本阶段内核不实现资源锁） */
+  /** 组织层注入的权限授权校验；内核始终执行资源互斥 */
   authorize?: ResourceAuthorizer;
 }
 
@@ -499,7 +500,7 @@ export async function runCapability(
   }
   store.event("input-validated", "输入通过 schema 校验");
 
-  // 2) 资源授权（组织层注入；内核不假装实现了资源锁）
+  // 2) 权限授权（组织层注入；不替代资源租约）
   let authorization: CapabilityRunResult["resources"] = {
     declared: entry.descriptor.resources,
     authorization: "not-enforced",
@@ -586,6 +587,21 @@ export async function runCapability(
     }
   }
 
+  let releaseResources: ResourceLease;
+  try {
+    releaseResources = await acquireResources(project.realRoot, entry.descriptor.resources, Object.values(providerBindingDirs));
+    store.event("resources-acquired", "已取得跨进程资源租约");
+  } catch (error) {
+    return finish({
+      command: null,
+      execution: { status: "failed", lifecycle: "completed", exitCode: null, signal: null, attempts: 0,
+        error: structuredError("resource-busy", "resource", error instanceof Error ? error.message : String(error)) },
+      acceptance: { status: "not-run", reason: "资源正在使用，未执行", pending: false, evidence: [] },
+      preconditions: [], resources: authorization, sideEffects: [], artifacts: [], logs: emptyLogs(),
+      output: null, followUp: [], notes: [], warnings: [], tool: null,
+    });
+  }
+  try {
   // 3) 前置条件（fail-closed：violated / unknown 都不执行）
   const preconditionOutcomes: PreconditionOutcome[] = [];
   for (const declaration of entry.descriptor.preconditions) {
@@ -655,6 +671,10 @@ export async function runCapability(
   let outcome: ImplementationOutcome;
   try {
     outcome = await entry.implementation.execute(input, context);
+    if (outcome && typeof outcome === "object" && outcome.resourceOwnerPid !== undefined) {
+      const transferred = await releaseResources.transfer(outcome.resourceOwnerPid);
+      store.event(transferred ? "resources-transferred" : "resources-process-ended", transferred ? "后台进程继续持有资源租约" : "后台进程已退出，仍须核对原完成回执", { pid: outcome.resourceOwnerPid });
+    }
   } catch (err) {
     const error = toStructuredError(err);
     store.event("execute-threw", error.message);
@@ -849,6 +869,7 @@ export async function runCapability(
     warnings,
     tool: safeOutcome.tool ?? null,
   });
+  } finally { await releaseResources(); }
 }
 
 /** 便捷封装：把结构化结果序列化为稳定 JSON 文本（CLI/SDK 共用） */

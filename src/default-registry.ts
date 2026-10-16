@@ -1,3 +1,6 @@
+import { createShipProvider } from "./providers/ship";
+import { createXlmergeProvider } from "./providers/xlmerge";
+import type { CommandProviderDeps } from "./providers/command-provider";
 /**
  * 默认 capability 注册表：显式装配内置 Provider。
  *
@@ -15,6 +18,8 @@ import { createFigmaProvider, type FigmaProviderDeps } from "./providers/figma";
 
 export interface DefaultRegistryOptions {
   executor?: ProcessExecutor;
+  shipDiscoverBackend?: CommandProviderDeps["discoverBackend"];
+  xlmergeDiscoverBackend?: CommandProviderDeps["discoverBackend"];
   /** 完整 Provider 集合（提供即完全替代内置装配；顺序即注册顺序） */
   providers?: CapabilityProvider[];
   /** 覆盖 Unity 后端发现（测试/夹具注入；providers 提供时忽略） */
@@ -49,5 +54,7 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Cap
     }),
   );
   registry.registerProvider(createArtProvider({executor,discoverBackend:options.artDiscoverBackend,env:options.artEnv}));
+  registry.registerProvider(createShipProvider({ executor, discoverBackend: options.shipDiscoverBackend }));
+  registry.registerProvider(createXlmergeProvider({ executor, discoverBackend: options.xlmergeDiscoverBackend }));
   return registry;
 }

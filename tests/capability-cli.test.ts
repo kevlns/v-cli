@@ -93,6 +93,8 @@ describe("CLI：project init / inspect", () => {
     expect(config).toEqual({
       schemaVersion: 1,
       bindings: {
+        ship: {projectDir:"."},
+        xlmerge: {projectDir:"."},
         art: {workspace:'.vant/art',output:'.vant/art/output',cache:'.vant/art/cache',projectId:'project'},
         unity: { projectDir: "Client" },
         figma: { projectDir: "Client", stagingRoot: "Client/Assets/Arts/Game/FigmaAssets/_Staging" },
@@ -134,7 +136,7 @@ describe("CLI：project init / inspect", () => {
     const dryPayload = dry.json as { action: string; dryRun: boolean; added: string[] };
     expect(dryPayload.action).toBe("reconciled");
     expect(dryPayload.dryRun).toBe(true);
-    expect(dryPayload.added).toEqual(["figma", "art"]);
+    expect(dryPayload.added).toEqual(["figma", "art", "ship", "xlmerge"]);
     // dry-run 未写：文件仍是 unity-only
     expect(JSON.parse(readFileSync(configFile, "utf-8")).bindings).toEqual(oldStyle.bindings);
 
@@ -142,7 +144,7 @@ describe("CLI：project init / inspect", () => {
     expect(real.status).toBe(0);
     const realPayload = real.json as { action: string; added: string[] };
     expect(realPayload.action).toBe("reconciled");
-    expect(realPayload.added).toEqual(["figma", "art"]);
+    expect(realPayload.added).toEqual(["figma", "art", "ship", "xlmerge"]);
     const merged = JSON.parse(readFileSync(configFile, "utf-8")) as { bindings: Record<string, unknown> };
     expect(merged.bindings.unity).toEqual(oldStyle.bindings.unity); // 手工钉扎原样保留
     expect((merged.bindings.figma as { stagingRoot: string }).stagingRoot).toContain("_Staging");
@@ -195,7 +197,7 @@ describe("CLI：project init / inspect", () => {
     expect(unityBinding.dirs.projectDir).toBe(join(root, "Client"));
     expect(payload.state.exists).toBe(false);
     const unity = payload.providers.find((p) => p.id === "unity")!;
-    expect(unity.capabilityCount).toBe(10);
+    expect(unity.capabilityCount).toBe(16);
     expect(unity.state).toBe(IS_WIN ? "available" : "platform-mismatch");
   });
 
@@ -215,21 +217,11 @@ describe("CLI：capability list / describe（不执行工具）", () => {
       providers: { id: string; state: string }[];
       capabilities: { id: string; preconditions: string[] }[];
     };
-    expect(payload.providers.map((p) => p.id)).toEqual(["unity", "figma", "art"]);
-    expect(payload.capabilities.filter((c)=>!c.id.startsWith("art.")).map((c) => c.id)).toEqual([
-      "figma.contract",
-      "figma.doctor",
-      "unity.compile",
-      "unity.compile-query",
-      "unity.compile-status",
-      "unity.doctor",
-      "unity.editor-status",
-      "unity.test-cancel",
-      "unity.test-cancel-run",
-      "unity.test-query",
-      "unity.test-start",
-      "unity.test-status",
-    ]);
+    expect(payload.providers.map((p) => p.id)).toEqual(["unity", "figma", "art", "ship", "xlmerge"]);
+    for (const provider of ["unity", "figma", "art", "ship", "xlmerge"]) {
+      expect(payload.capabilities.some(c=>c.id.startsWith(provider+"."))).toBe(true);
+    }
+    expect(payload.capabilities.map(c=>c.id)).toEqual(expect.arrayContaining(["ship.steam-push", "ship.wx-push", "xlmerge.apply", "xlmerge.launch", "xlmerge.status", "xlmerge.cancel", "figma.export", "figma.build", "unity.command"]));
     expect(payload.capabilities.find((c) => c.id === "unity.compile")?.preconditions).toContain(
       "unity.pipeline-ready",
     );

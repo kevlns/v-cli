@@ -202,6 +202,7 @@ function validateResources(list: unknown, at: string): string[] {
       errors.push(`${where} 必须是对象`);
       return;
     }
+    if (entry.key !== undefined && (typeof entry.key !== "string" || !/^[a-z][a-z0-9-]*$/.test(entry.key))) errors.push(`${where}.key 必须是稳定资源名称`);
     if (!isNonEmptyString(entry.kind) || !(RESOURCE_KINDS as readonly string[]).includes(entry.kind)) {
       errors.push(`${where}.kind 必须是 [${RESOURCE_KINDS.join(", ")}] 之一`);
     }
@@ -225,6 +226,10 @@ export function validateCapability(
   const errors: string[] = [];
   if (!isPlainObject(descriptor)) return ["descriptor 必须是对象"];
   const d = descriptor as Partial<CapabilityDescriptor>;
+  if (d.commands !== undefined && (!Array.isArray(d.commands) || d.commands.some(p => !Array.isArray(p) || p.length === 0 || p.some(t => typeof t !== "string" || !/^[a-z][a-z0-9-]*$/.test(t))))) {
+    errors.push("commands 必须是非空命令路径数组");
+  }
+
 
   if (!isNonEmptyString(d.id) || !CAPABILITY_ID_RE.test(d.id)) {
     errors.push(`id 必须是带命名空间的稳定 id（如 unity.compile；收到 ${JSON.stringify(d.id)}）`);
@@ -418,6 +423,7 @@ export class CapabilityRegistry {
       preconditions: entry.descriptor.preconditions.map((p) => p.id),
       sideEffectKinds: [...new Set(entry.descriptor.sideEffects.map((s: SideEffectDeclaration) => s.kind))],
       resources: entry.descriptor.resources.map((r: ResourceRequirement) => ({
+        ...(r.key ? {key:r.key} : {}),
         kind: r.kind,
         mode: r.mode,
         scope: r.scope,

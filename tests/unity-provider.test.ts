@@ -64,7 +64,7 @@ function run(
     input,
     persist: false,
     ...extra,
-  });
+  }).then(result => { if (result.execution.error?.code === "resource-busy") throw Error(result.execution.error.message); return result; });
 }
 
 /** 假执行器记录的是 [backendBin, ...argv]；取插件参数部分 */
@@ -567,11 +567,17 @@ describe("unity provider：契约与注册", () => {
     const { registry } = registryFor(() => ({ exitCode: 0, stdout: READY_DOCTOR }));
     const ids = registry.list().map((r) => r.id);
     expect(ids).toEqual([
+      "unity.cache-clean",
+      "unity.cli-install",
+      "unity.command",
       "unity.compile",
       "unity.compile-query",
       "unity.compile-status",
       "unity.doctor",
       "unity.editor-status",
+      "unity.pipeline-install",
+      "unity.routes",
+      "unity.setup",
       "unity.test-cancel",
       "unity.test-cancel-run",
       "unity.test-query",
