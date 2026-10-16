@@ -205,6 +205,7 @@ const definitions: Definition[] = [
         enum: ["style", "palette", "rendering"],
       },
       purposes: { type: "string" },
+      "item-id": identifier,
       note: { type: "string" },
     },
     required: ["kind", "id", "revision", "source"],
