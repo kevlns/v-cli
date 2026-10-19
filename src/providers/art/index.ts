@@ -102,13 +102,16 @@ const definitions: Definition[] = [
   {id:"shutdown",command:["shutdown"],fields:{},network:true,global:true},
   {id:"doctor",command:["doctor"],fields:{backend:identifier,start:{type:"boolean"}},network:true,global:true},
   {id:"workflow-list",command:["workflow","list"],fields:{},readonly:true,global:true},
+  ...["guide","list","inspect","verify","register","unregister"].map((action):Definition=>({
+    id:"environment-"+action,command:["environment",action],global:true,
+    fields:["guide","list"].includes(action)?{guide:identifier}:action==="unregister"?{directory:{type:"string",minLength:1}}:{directory:{type:"string",minLength:1},endpoint:{type:"string",minLength:1},guide:identifier},
+    required:["guide","list"].includes(action)?[]:action==="unregister"?["directory"]:["directory","endpoint"],
+    readonly:!["register","unregister"].includes(action),network:["inspect","verify","register"].includes(action),
+  })),
   {id:"project-upgrade",command:["project","upgrade"],fields:{dry:{type:"boolean"},mapping:file}},
 
   {id:"job-template",command:["job","template"],fields:{kind:{type:"string",enum:["generate","edit"]},core:identifier},required:["kind"],readonly:true},
   {id:"job-from-candidate",command:["job","from-candidate"],fields:{id:identifier,run:identifier,candidate:{type:"string",pattern:"^[a-f0-9]{64}$"}},required:["id","run","candidate"]},
-  {id:'deployment-plan',command:['deployment','plan'],fields:{directory:{type:'string',minLength:1},endpoint:{type:'string',minLength:1}},required:['directory'],readonly:true},
-  {id:'deployment-start',command:['deployment','start'],fields:{plan:file,operation:{type:'string',pattern:'^[a-z0-9-]{1,128}$'}},required:['plan','operation'],network:true},
-  ...['status','cancel','recover'].map((action):Definition=>({id:'deployment-'+action,command:['deployment',action],fields:action==='recover'?{operation:{type:'string',pattern:'^[a-z0-9-]{1,128}$'}}:{id:identifier},required:[action==='recover'?'operation':'id'],readonly:action!=='cancel'})),
  {id:"run-recover",command:["task","recover"],fields:{operation:{type:"string",pattern:"^[a-z0-9-]{1,128}$"}},required:["operation"],start:true},
   ...["style", "job"].flatMap((kind) =>
     ["create", "list", "read", "update", "derive", "discard"].map(
@@ -432,7 +435,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
           if (!output || typeof output !== "object") throw new Error();
         } catch {
           const processState=executionFromProcess(outcome);
-          const uncertain=d.start||d.control||d.id==="deployment-start"||processState.lifecycle==="unknown";
+          const uncertain=d.start||d.control||processState.lifecycle==="unknown";
           return {
             execution: {
               ...processState,

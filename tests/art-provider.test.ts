@@ -18,6 +18,18 @@ const config = {
   },
 };
 describe("art controlled execution and lifecycle", () => {
+  it("routes environment inspection without a project object and validates directory before dispatch",async()=>{
+    const project=makeTempProject({config,withProjectVersion:false}),executor=new FakeExecutor(()=>({stdout:JSON.stringify({ok:true,root:"C:/AI/test"})})),registry=new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+    try{
+      const invalid=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.environment-inspect",input:{endpoint:"http://127.0.0.1:8188/"}});
+      expect(invalid.execution.status).toBe("failed");expect(executor.calls).toHaveLength(0);
+      const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.environment-inspect",input:{directory:"C:/AI/test",endpoint:"http://127.0.0.1:8188/"}});
+      expect(result.execution.status).toBe("succeeded");expect(executor.calls).toHaveLength(1);
+      const argv=JSON.stringify(executor.calls[0]);expect(argv).toContain("environment");expect(argv).not.toContain('"--project"');
+      expect(registry.list().some(c=>c.id.startsWith("art.deployment-"))).toBe(false);
+    }finally{project.cleanup();}
+  });
   it("routes a style decision through the same controlled project and revision boundary",async()=>{
     const project=makeTempProject({config,withProjectVersion:false}),executor=new FakeExecutor(()=>({stdout:JSON.stringify({id:"style-a",revision:2,review:{ready:true}})})),registry=new CapabilityRegistry();
     registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
