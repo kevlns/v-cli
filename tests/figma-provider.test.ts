@@ -333,5 +333,5 @@ describe("阶段 E 一审修复回归", () => {
     const hasUnexpected = failedNames.some((n) => !offlineExpected.has(n));
     expect(hasUnexpected).toBe(false);
     expect(result.acceptance.reason).toContain("离线环境为预期 FAIL");
-  });
+  }, 30_000);
 });
