@@ -163,6 +163,9 @@ const definitions: Definition[] = [
     required: ["id", "revision"],
     start: true,
   },
+  {id:"style-export",command:["style","export"],fields:{id:identifier,out:file},required:["id","out"]},
+  {id:"style-import",command:["style","import"],fields:{file},required:["file"]},
+  {id:"style-sources",command:["style","sources"],fields:{input:file},required:["input"],readonly:true,global:true},
   {id:"style-resolve",command:["style","resolve"],fields:objectFields,required:["id","revision","input"]},
   {
     id: "style-adopt",
@@ -407,7 +410,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
         for (const key of d.positional ?? []) argv.push(resolveInsideProject(ctx.projectAnchor,String(input[key]),"art."+key).path);
         for (const [key, value] of Object.entries(input)) {
           if (key === "handle" || d.positional?.includes(key) || value === false) continue;
-          const actual = ["input", "source", "plan", "out", "report", "mapping", ...(d.id==="agent-init"?["directory"]:[])].includes(key)
+          const actual = ["input", "file", "source", "plan", "out", "report", "mapping", ...(d.id==="agent-init"?["directory"]:[])].includes(key)
             ? resolveInsideProject(
                 ctx.projectAnchor,
                 String(value),

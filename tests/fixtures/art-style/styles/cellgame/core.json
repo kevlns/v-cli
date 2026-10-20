@@ -1,0 +1,116 @@
+{
+  "schema": "art-workshop/core",
+  "project": "cellgame",
+  "id": "cellgame",
+  "guidance": {
+    "principles": [
+      "风格只定义如何绘制，跨主体复用；不能冻结参考作品的具体内容。",
+      "具体轮廓、比例、结构、部件、姿态、数量、身份色、物理材质和光源方向由任务需求定义。",
+      "刻画密度只控制绘制繁简，不省略任务声明的结构、部件或文字。",
+      "高光是表现方式，不统一物体材质；笔触是绘画痕迹，不禁止需求中的鳞片、花纹或表面结构。",
+      "色彩规则描述饱和度、色相对比和阴影偏色；主体身份色与实际光照以任务声明为准。",
+      "背景、视角、构图、留白、裁切、文字和尺寸属于任务与资产规格。",
+      "分类决定观察焦点，不按图片主体或文件名推断；风格参考不配置任务用途。",
+      "区分观察、建议和未确定项，不从参考图片中的内容生成全局主题或题材白名单。",
+      "规则精炼且一致，模型、凭据、参数和运行状态不进入风格核心。",
+      "冻结可追溯，核心不可原地覆写；旧职责版本必须重新分析和明确采用。"
+    ],
+    "ownership": {
+      "core": "媒介、描绘细节、明暗方式、描边、高光画法、笔触、明度对比与色彩关系",
+      "brief": "主体、轮廓、比例、结构、部件、姿态、动作、数量、身份色、材质与光源",
+      "profile": "画幅、背景、视角、构图、留白、裁切、文字和投影要求",
+      "execution": "模型、像素尺寸、候选数量、seed、水印与扩写",
+      "edit": "明确的修改目标、保持目标和编辑底图，二者不得冲突"
+    }
+  },
+  "config": {
+    "rules": [
+      {
+        "id": "medium",
+        "scope": "medium",
+        "strength": "required",
+        "instruction": "采用数字卡通插画表现",
+        "when": ""
+      },
+      {
+        "id": "outline",
+        "scope": "outline",
+        "strength": "default",
+        "instruction": "深色粗壮硬描边，具体颜色与粗细随画幅调整",
+        "when": ""
+      },
+      {
+        "id": "shading",
+        "scope": "shading",
+        "strength": "default",
+        "instruction": "以有限硬边色阶塑形，层次随体量调整",
+        "when": ""
+      },
+      {
+        "id": "crystal-highlights",
+        "scope": "highlights",
+        "strength": "default",
+        "instruction": "允许白色锐利高光和局部柔和发光",
+        "when": "任务指定透明或发光物体时"
+      }
+    ]
+  },
+  "report": {
+    "schema": "art-workshop/style-report",
+    "project": "cellgame",
+    "id": "cellgame",
+    "summary": "数字插画，以干净描边、硬边色块和偏冷阴影表达；造型、材质、身份色与光源由任务定义。",
+    "observations": [
+      {
+        "source": "已确认的项目美术要求",
+        "scope": "style",
+        "feature": "简洁硬边明暗与干净描边",
+        "evidence": "沿用本工程已采用的风格要求。",
+        "confidence": 1
+      }
+    ],
+    "recommendation": {
+      "rules": [
+        {
+          "id": "medium",
+          "scope": "medium",
+          "strength": "required",
+          "instruction": "采用数字卡通插画表现",
+          "when": ""
+        },
+        {
+          "id": "outline",
+          "scope": "outline",
+          "strength": "default",
+          "instruction": "深色粗壮硬描边，具体颜色与粗细随画幅调整",
+          "when": ""
+        },
+        {
+          "id": "shading",
+          "scope": "shading",
+          "strength": "default",
+          "instruction": "以有限硬边色阶塑形，层次随体量调整",
+          "when": ""
+        },
+        {
+          "id": "crystal-highlights",
+          "scope": "highlights",
+          "strength": "default",
+          "instruction": "允许白色锐利高光和局部柔和发光",
+          "when": "任务指定透明或发光物体时"
+        }
+      ]
+    },
+    "provenance": {
+      "source": "既有项目要求整理；未重新调用视觉模型"
+    },
+    "schemaVersion": 3,
+    "issues": [],
+    "notes": [],
+    "decisions": []
+  },
+  "approvedAt": "2026-10-08T09:53:38.964Z",
+  "approvalNote": "采用既有工程要求，按当前职责边界整理冻结",
+  "schemaVersion": 3,
+  "coreHash": "35edf470aa4b27e1649443f59b99e0e9f68dafc1a423dff43064a966f4088011"
+}

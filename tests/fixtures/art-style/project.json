@@ -1,0 +1,18 @@
+{
+  "id": "cellgame",
+  "name": "细胞游戏",
+  "analysisModel": "qwen3-vl-plus",
+  "execution": {
+    "model": "qwen-image-3.0-pro",
+    "size": "1024*1024",
+    "promptExtend": false,
+    "perValue": 1,
+    "watermark": false
+  },
+  "cores": [
+    "cellgame"
+  ],
+  "defaultCore": "cellgame",
+  "schemaVersion": 2,
+  "revision": 1
+}

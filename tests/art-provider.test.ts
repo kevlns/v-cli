@@ -18,6 +18,33 @@ const config = {
   },
 };
 describe("art controlled execution and lifecycle", () => {
+  it("routes frozen style transfer and discovery with explicit controlled paths and effects", async () => {
+    const project = makeTempProject({config,withProjectVersion:false});
+    const executor = new FakeExecutor(() => ({stdout: JSON.stringify({ok:true})}));
+    const registry = new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor, discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+    try {
+      for (const [id,input,key] of [
+        ["style-export",{id:"style-a",out:"shared.style.json"},"out"],
+        ["style-import",{file:"shared.style.json"},"file"],
+        ["style-sources",{input:"sources.json"},"input"],
+      ] as const) {
+        const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art."+id,input});
+        expect(result.execution.status).toBe("succeeded");
+        const argv=executor.calls.at(-1)!.args;
+        expect(argv.slice(1,3)).toEqual(["style",id.slice(6)]);
+        expect(argv[argv.indexOf("--"+key)+1]).toBe(join(project.root,input[key]!));
+        expect(argv.includes("--project")).toBe(id!=="style-sources");
+        const descriptor=registry.describe("art."+id)!;
+        expect(descriptor.sideEffects.some(e=>e.kind==="fs-write")).toBe(id!=="style-sources");
+        expect(descriptor.sideEffects.some(e=>e.kind==="network")).toBe(false);
+        const before=executor.calls.length;
+        const escaped=await runCapability(registry,{projectRoot:project.root,capabilityId:"art."+id,input:{...input,[key]:"../outside.json"}});
+        expect(escaped.execution.status).toBe("failed");
+        expect(executor.calls).toHaveLength(before);
+      }
+    } finally {project.cleanup();}
+  });
   it("routes environment inspection without a project object and validates directory before dispatch",async()=>{
     const project=makeTempProject({config,withProjectVersion:false}),executor=new FakeExecutor(()=>({stdout:JSON.stringify({ok:true,root:"C:/AI/test"})})),registry=new CapabilityRegistry();
     registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));

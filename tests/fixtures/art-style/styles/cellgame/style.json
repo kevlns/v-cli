@@ -1,0 +1,127 @@
+{
+  "schema": "art-workshop/style",
+  "schemaVersion": 2,
+  "project": "cellgame",
+  "id": "cellgame",
+  "name": "cellgame",
+  "revision": 1,
+  "status": "frozen",
+  "createdAt": "2026-10-13T00:00:00.000Z",
+  "updatedAt": "2026-10-13T00:00:00.000Z",
+  "source": null,
+  "config": {
+    "description": "数字插画，以干净描边、硬边色块和偏冷阴影表达；造型、材质、身份色与光源由任务定义。",
+    "constraints": []
+  },
+  "references": [],
+  "report": {
+    "schema": "art-workshop/style-report",
+    "project": "cellgame",
+    "id": "cellgame",
+    "summary": "圆润、低细节、两阶赛璐璐游戏插画。",
+    "observations": [
+      {
+        "source": "已确认的项目美术要求",
+        "scope": "style",
+        "feature": "简洁硬边明暗与圆润形体",
+        "evidence": "沿用本工程已采用的风格要求。",
+        "confidence": 1
+      }
+    ],
+    "recommendation": {
+      "rules": [
+        {
+          "id": "medium",
+          "scope": "medium",
+          "strength": "required",
+          "instruction": "采用数字卡通插画表现",
+          "when": ""
+        },
+        {
+          "id": "outline",
+          "scope": "outline",
+          "strength": "default",
+          "instruction": "深色粗壮硬描边，具体颜色与粗细随画幅调整",
+          "when": ""
+        },
+        {
+          "id": "shading",
+          "scope": "shading",
+          "strength": "default",
+          "instruction": "以有限硬边色阶塑形，层次随体量调整",
+          "when": ""
+        },
+        {
+          "id": "crystal-highlights",
+          "scope": "highlights",
+          "strength": "default",
+          "instruction": "允许白色锐利高光和局部柔和发光",
+          "when": "任务指定透明或发光物体时"
+        }
+      ]
+    },
+    "provenance": {
+      "source": "既有项目要求整理；未重新调用视觉模型"
+    },
+    "data": {
+      "schema": "art-workshop/style-report",
+      "project": "cellgame",
+      "id": "cellgame",
+      "summary": "数字插画，以干净描边、硬边色块和偏冷阴影表达；造型、材质、身份色与光源由任务定义。",
+      "observations": [
+        {
+          "source": "已确认的项目美术要求",
+          "scope": "style",
+          "feature": "简洁硬边明暗与干净描边",
+          "evidence": "沿用本工程已采用的风格要求。",
+          "confidence": 1
+        }
+      ],
+      "recommendation": {
+        "rules": [
+          {
+            "id": "medium",
+            "scope": "medium",
+            "strength": "required",
+            "instruction": "采用数字卡通插画表现",
+            "when": ""
+          },
+          {
+            "id": "outline",
+            "scope": "outline",
+            "strength": "default",
+            "instruction": "深色粗壮硬描边，具体颜色与粗细随画幅调整",
+            "when": ""
+          },
+          {
+            "id": "shading",
+            "scope": "shading",
+            "strength": "default",
+            "instruction": "以有限硬边色阶塑形，层次随体量调整",
+            "when": ""
+          },
+          {
+            "id": "crystal-highlights",
+            "scope": "highlights",
+            "strength": "default",
+            "instruction": "允许白色锐利高光和局部柔和发光",
+            "when": "任务指定透明或发光物体时"
+          }
+        ]
+      },
+      "provenance": {
+        "source": "既有项目要求整理；未重新调用视觉模型"
+      },
+      "schemaVersion": 3,
+      "issues": [],
+      "notes": [],
+      "decisions": []
+    },
+    "sourceHash": "7e1e1a64b22477e808465d0ced2f316e106153e87691f4e68002be91e20aba7b",
+    "schemaVersion": 3,
+    "issues": [],
+    "notes": [],
+    "decisions": []
+  },
+  "coreHash": "c98f5201d49184a8b5e341904f03df5b7df9a8ed407ef6ccfa014ce3e143ca6f"
+}
