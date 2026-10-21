@@ -45,7 +45,7 @@ Unity runId 要求匹配实际路由及工程适配包。命令层单槽位仍�
 
 art 的 queued/running/cancelling 占用对象；failed/cancelled 只有停止证据完整才释放。unknown、unsettled、promptId、remoteCancellation 或 dispatching/accepted 远程回执都阻止判为空闲。
 
-远程回执先持久化 dispatching 再提交，先 accepted+taskId 再查询，先 completed+urls 再下载。task resume 只恢复 accepted/completed 的原身份，不发生成 POST、不补发未提交项；无上游 ID 的 dispatching 保持未知。
+远程回执先持久化 dispatching 再提交，先 accepted+taskId 再查询，先 completed+urls 再下载。task resume 按远程 accepted/completed 回执或本地 ComfyUI 已持久化的 prompt ID 恢复原身份，不发生成 POST、不补发未提交项；无上游 ID 的 dispatching 保持未知。
 
 恢复原运行、重试明确失败项、重新编辑配置产生的新批次是三种不同操作。成功项不重跑，上游完成待下载项走原结果取回；配置变化需重新预演。准确行为由 art 随包规范和当前实现负责。
 

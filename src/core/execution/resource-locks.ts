@@ -76,13 +76,14 @@ export async function acquireResources(
   project: string,
   resources: ResourceRequirement[],
   bindingPaths: string[] = [],
+  options: { waitForLocal?: boolean; signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<ResourceLease> {
   if (!resources.length)
     return Object.assign(async () => {}, { transfer: async () => false });
   const dir = root();
   fs.mkdirSync(dir, { recursive: true });
   const paths = [project, ...bindingPaths].map((p) =>
-    comparePathForm(fs.existsSync(p) ? fs.realpathSync(p) : path.resolve(p)),
+    comparePathForm(fs.existsSync(p) ? fs.realpathSync.native(p) : path.resolve(p)),
   );
   const claim: Claim = {
     token: randomUUID(),
@@ -101,9 +102,13 @@ export async function acquireResources(
       if (fs.existsSync(temp)) await remove(temp);
     }
   }
-  await write();
+  const deadline = Date.now() + (options.timeoutMs ?? 90000);
   let transferred = false;
+  for (;;) {
+  options.signal?.throwIfAborted();
+  await write();
   try {
+    let localBusy = false;
     for (const name of fs.readdirSync(dir).filter((n) => n.endsWith(".json"))) {
       const existing = path.join(dir, name);
       if (existing === file) continue;
@@ -120,12 +125,20 @@ export async function acquireResources(
         await remove(existing);
         continue;
       }
-      if (conflicts(claim, other))
-        throw Error(`资源正被进程 ${other.pid} 使用`);
+      if (conflicts(claim, other)) {
+        if (other.pid === process.pid && options.waitForLocal) localBusy = true;
+        else throw Error(`资源正被进程 ${other.pid} 使用`);
+      }
     }
+    if (!localBusy) break;
+    // Waiting claims must not block their owner or other waiting callers.
+    await remove(file);
+    if (Date.now() >= deadline) throw Error("等待当前服务的资源操作完成超时");
+    await pause();
   } catch (error) {
     await remove(file);
     throw error;
+  }
   }
   return Object.assign(
     async () => {

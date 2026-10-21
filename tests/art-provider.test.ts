@@ -18,6 +18,39 @@ const config = {
   },
 };
 describe("art controlled execution and lifecycle", () => {
+  it("routes project favorites and explicit false values without requesting generation", async () => {
+    const project=makeTempProject({config,withProjectVersion:false});
+    const executor=new FakeExecutor(()=>({stdout:"[]"}));
+    const registry=new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+    try{
+      const list=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.candidate-favorites",input:{}});
+      expect(list.execution.status).toBe("succeeded");
+      expect(executor.calls.at(-1)!.args.slice(1,3)).toEqual(["candidate","favorites"]);
+      for(const value of ["true","false"]){
+        const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.candidate-favorite",input:{job:"task-a",run:"run-a",candidate:"a".repeat(64),value}});
+        expect(result.execution.status).toBe("succeeded");
+        const argv=executor.calls.at(-1)!.args;
+        expect(argv[argv.indexOf("--value")+1]).toBe(value);
+        expect(argv).not.toContain("--background");
+      }
+    }finally{project.cleanup();}
+  });
+  it("rejects missing style report and core before dispatching a backend process", async () => {
+    const project=makeTempProject({config,withProjectVersion:false});
+    const executor=new FakeExecutor(()=>({stdout:JSON.stringify({ok:true})}));
+    const registry=new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+    try {
+      for(const [id,field] of [["style-validate","report"],["style-show","core"]]) {
+        const schema=registry.describe("art."+id)!.inputSchema;
+        expect(schema.type==="object"?schema.required:undefined).toContain(field);
+        const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art."+id,input:{}});
+        expect(result.execution.status).toBe("failed");
+        expect(executor.calls).toHaveLength(0);
+      }
+    } finally {project.cleanup();}
+  });
   it("routes frozen style transfer and discovery with explicit controlled paths and effects", async () => {
     const project = makeTempProject({config,withProjectVersion:false});
     const executor = new FakeExecutor(() => ({stdout: JSON.stringify({ok:true})}));
@@ -65,8 +98,12 @@ describe("art controlled execution and lifecycle", () => {
       const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-resolve",input:{id:"style-a",revision:1,input:"decision.json"}});
       expect(result.execution.status).toBe("succeeded");expect(executor.calls).toHaveLength(1);
       expect(JSON.stringify(executor.calls[0])).toContain("resolve");
+      const revised=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-revise",input:{id:"style-a",revision:2,input:"decision.json"}});
+      expect(revised.execution.status).toBe("succeeded");expect(JSON.stringify(executor.calls.at(-1))).toContain("revise");
+      expect(registry.describe("art.style-revise")!.sideEffects.some(e=>e.kind==="network")).toBe(false);
+      const beforeInvalid=executor.calls.length;
       const invalid=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-resolve",input:{id:"style-a",input:"decision.json"}});
-      expect(invalid.execution.status).toBe("failed");expect(executor.calls).toHaveLength(1);
+      expect(invalid.execution.status).toBe("failed");expect(executor.calls).toHaveLength(beforeInvalid);
     }finally{project.cleanup();}
   });
   it("publishes only drawing reference categories and rejects removed shape classification before execution", async () => {
@@ -193,4 +230,14 @@ describe("art controlled execution and lifecycle", () => {
   }finally{project.cleanup();}
  });
 
+});
+
+it("accepts the shipped guide identity through every structured environment action",async()=>{
+ const project=makeTempProject({config,withProjectVersion:false});
+ const executor=new FakeExecutor(()=>({stdout:JSON.stringify({ok:true})}));const registry=new CapabilityRegistry();
+ registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+ try{for(const action of ["guide","inspect","verify","prepare","register"]){
+ const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art."+"environment-"+action,input:{guide:"qwen-image-2.1-Q4-cpu-text-v1",...(action==="guide"?{}:{directory:project.root,endpoint:"http://127.0.0.1:8188/"})}});
+ expect(result.execution.status).toBe("succeeded");expect(executor.calls.at(-1)!.args).toContain("qwen-image-2.1-Q4-cpu-text-v1");
+ }}finally{project.cleanup();}
 });

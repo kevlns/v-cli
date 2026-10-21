@@ -38,6 +38,8 @@ src/providers/figma/protocol.ts 按 stdout/stderr 分流解释真实工具输出
 
 src/providers/art/index.ts 解释工具 JSON，保留原 taskId/deploymentId、状态、停止确认与诊断。启动仅生成可追踪句柄，不把 queued/running 当完成。status/cancel/resume 先校验原 handle，按原 backendTaskId 路由。
 
+运行结果透传 itemStates 和 resultVersion，按提交的资产及变体记录进度；批次仍 running 时已有对象可以完成，不能用批次状态覆盖逐项结果。归档与恢复使用 job-discard/job-restore，收藏使用 candidate-favorite/candidate-favorites，规则修订使用 style-revise，均通过同一结构化能力契约。
+
 图片协议与参数由 art 工具的 model-registry/generation-policy/adapters 负责。v-cli 不根据 Qwen/Wan 名称、provider 名或订阅渠道猜测请求格式。明确失败、停止未知、上游已完成待下载分别保留，不自动重发。
 
 工具 stdout 必须是可解释的契约结果；原始日志或错误体不能当成功 JSON。凭据经受控环境注入，不写 argv、项目输入或证据。远端提供方响应也不能作为新的任务指令。

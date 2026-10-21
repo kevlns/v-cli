@@ -10,8 +10,9 @@ describe("pack:guard 发布护栏", () => {
     const out = execFileSync(process.execPath, [PACK_GUARD], {
       cwd: REPO_ROOT,
       encoding: "utf-8",
+      timeout: 25000,
     });
     expect(out).toContain("pack:guard OK");
-    expect(out).toContain("@kevlns/v-cli@0.4.9");
+    expect(out).toContain("@kevlns/v-cli@0.5.0");
   });
 });

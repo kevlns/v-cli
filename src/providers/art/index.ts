@@ -26,6 +26,7 @@ const identifier: JsonSchema = {
   type: "string",
   pattern: "^[a-z0-9][a-z0-9-]{0,63}$",
 };
+const guideId: JsonSchema = { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" };
 const revision: JsonSchema = { type: "integer", minimum: 1 };
 const file: JsonSchema = {
   type: "string",
@@ -93,8 +94,8 @@ const definitions: Definition[] = [
   {id:"agent-docs",command:["agent","docs"],fields:{},readonly:true,text:true,global:true},
   {id:"agent-init",command:["agent","init"],fields:{directory:file,dry:{type:"boolean"}},required:["directory"],global:true},
   {id:"list",command:["list"],fields:{},readonly:true,global:true},
-  {id:"style-validate",command:["style","validate"],fields:{report:file},readonly:true},
-  {id:"style-show",command:["style","show"],fields:{core:identifier},readonly:true},
+  {id:"style-validate",command:["style","validate"],fields:{report:file},required:["report"],readonly:true},
+  {id:"style-show",command:["style","show"],fields:{core:identifier},required:["core"],readonly:true},
   ...["generate","edit"].map((kind):Definition=>({id:kind+"-show",command:[kind,"show"],fields:{job:identifier},required:["job"],readonly:true})),
   {id:"check",command:["check"],fields:{run:file},required:["run"],positional:["run"],readonly:true,global:true},
   {id:"compare",command:["compare"],fields:{before:file,after:file},required:["before","after"],positional:["before","after"],readonly:true,global:true},
@@ -102,17 +103,18 @@ const definitions: Definition[] = [
   {id:"shutdown",command:["shutdown"],fields:{},network:true,global:true},
   {id:"doctor",command:["doctor"],fields:{backend:identifier,start:{type:"boolean"}},network:true,global:true},
   {id:"workflow-list",command:["workflow","list"],fields:{},readonly:true,global:true},
-  ...["guide","list","inspect","verify","register","unregister"].map((action):Definition=>({
+  ...["guide","list","prepare","inspect","verify","register","unregister"].map((action):Definition=>({
     id:"environment-"+action,command:["environment",action],global:true,
-    fields:["guide","list"].includes(action)?{guide:identifier}:action==="unregister"?{directory:{type:"string",minLength:1}}:{directory:{type:"string",minLength:1},endpoint:{type:"string",minLength:1},guide:identifier},
+    fields:["guide","list"].includes(action)?{guide:guideId}:action==="unregister"?{directory:{type:"string",minLength:1}}:{directory:{type:"string",minLength:1},endpoint:{type:"string",minLength:1},guide:guideId},
     required:["guide","list"].includes(action)?[]:action==="unregister"?["directory"]:["directory","endpoint"],
-    readonly:!["register","unregister"].includes(action),network:["inspect","verify","register"].includes(action),
+    readonly:!["prepare","register","unregister"].includes(action),network:["prepare","inspect","verify","register"].includes(action),
   })),
   {id:"project-upgrade",command:["project","upgrade"],fields:{dry:{type:"boolean"},mapping:file}},
 
   {id:"job-template",command:["job","template"],fields:{kind:{type:"string",enum:["generate","edit"]},core:identifier},required:["kind"],readonly:true},
   {id:"job-from-candidate",command:["job","from-candidate"],fields:{id:identifier,run:identifier,candidate:{type:"string",pattern:"^[a-f0-9]{64}$"}},required:["id","run","candidate"]},
  {id:"run-recover",command:["task","recover"],fields:{operation:{type:"string",pattern:"^[a-z0-9-]{1,128}$"}},required:["operation"],start:true},
+  {id:"job-restore",command:["job","restore"],fields:{id:identifier,revision},required:["id","revision"]},
   ...["style", "job"].flatMap((kind) =>
     ["create", "list", "read", "update", "derive", "discard"].map(
       (action): Definition => ({
@@ -166,6 +168,7 @@ const definitions: Definition[] = [
   {id:"style-export",command:["style","export"],fields:{id:identifier,out:file},required:["id","out"]},
   {id:"style-import",command:["style","import"],fields:{file},required:["file"]},
   {id:"style-sources",command:["style","sources"],fields:{input:file},required:["input"],readonly:true,global:true},
+  {id:"style-revise",command:["style","revise"],fields:objectFields,required:["id","revision","input"]},
   {id:"style-resolve",command:["style","resolve"],fields:objectFields,required:["id","revision","input"]},
   {
     id: "style-adopt",
@@ -277,6 +280,8 @@ const definitions: Definition[] = [
       readonly: ["list", "finalizations"].includes(action),
     }),
   ),
+  {id:"candidate-favorites",command:["candidate","favorites"],fields:{},readonly:true},
+  {id:"candidate-favorite",command:["candidate","favorite"],fields:{job:identifier,run:identifier,candidate:{type:"string",pattern:"^[a-f0-9]{64}$"},value:{type:"string",enum:["true","false"]}},required:["job","run","candidate","value"]},
 ];
 export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
   const discover =
@@ -353,7 +358,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
         strategy: "none",
         description: "启动不自动重试；恢复查询原句柄",
       },
-      timeoutMs: 90000,
+      timeoutMs: d.id === "environment-prepare" ? 1800000 : ["environment-verify", "environment-register"].includes(d.id) ? 7200000 : 90000,
       tags: ["art", "lifecycle"],
     },
     implementation: {
@@ -428,7 +433,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
           args: [backend.bin, ...argv],
           cwd: ctx.projectAnchor.root,
           env: deps.env,
-          timeoutMs: 90000,
+          timeoutMs: d.id === "environment-prepare" ? 1800000 : ["environment-verify", "environment-register"].includes(d.id) ? 7200000 : 90000,
           signal: ctx.signal,
         });
         let output: Record<string, unknown>;

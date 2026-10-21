@@ -47,7 +47,7 @@ export function resolveProjectRoot(input?: string, cwd: string = process.cwd()):
   }
   let realRoot: string;
   try {
-    realRoot = fs.realpathSync(root);
+    realRoot = fs.realpathSync.native(root);
   } catch (err) {
     throw new PathSafetyError(
       "project-root-unreadable",
@@ -115,7 +115,7 @@ export function resolveInsideProject(
   const existingAncestor = deepestExisting(target, project.realRoot);
   let ancestorReal: string;
   try {
-    ancestorReal = fs.realpathSync(existingAncestor);
+    ancestorReal = fs.realpathSync.native(existingAncestor);
   } catch (err) {
     throw new PathSafetyError(
       "path-unresolvable",
@@ -135,7 +135,7 @@ export function resolveInsideProject(
     if (lst.isSymbolicLink()) {
       throw new PathSafetyError("path-symlink", `${label} 是符号链接/联接，拒绝写入或跟随: ${target}`);
     }
-    realPath = fs.realpathSync(target);
+    realPath = fs.realpathSync.native(target);
     if (!isInside(project.realRoot, realPath)) {
       throw new PathSafetyError("path-escape", `${label} 的真实路径逃逸工程根: ${realPath}`);
     }

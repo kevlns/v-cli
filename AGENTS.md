@@ -18,7 +18,7 @@
 
 ### 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.4.9
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.5.0
 - 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
   **命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
@@ -48,7 +48,7 @@
 
 ### @kevlns/art-workshop — 命令 `v-cli art …`
 
-**版本**：0.3.11
+**版本**：0.4.0
 **描述**：管理项目风格、参考图、图片生成、编辑和定版。支持本地 ComfyUI 与远程图片模型。
 **平台**：win32, linux, darwin
 

@@ -48,3 +48,26 @@ it("独立 SDK 进程之间互斥，持有进程退出后可回收", async () =>
     project.cleanup();
   }
 }, 15000);
+
+
+it("same-host read/write overlap waits, cancels without side effects, and releases all leases", async () => {
+  const project = makeTempProject({config:{schemaVersion:1,bindings:{ship:{projectDir:"."}}},withProjectVersion:false});
+  const read = {kind:"project-workspace",mode:"shared",scope:"project",description:"refresh"} as const;
+  let release = await acquireResources(project.root, [read]);
+  try {
+    const controller = new AbortController();
+    const cancelled = acquireResources(project.root, [{...read,mode:"exclusive"}], [], {waitForLocal:true,signal:controller.signal});
+    controller.abort(new Error("cancel fixture"));
+    await expect(cancelled).rejects.toThrow("cancel fixture");
+    let entered = false;
+    const waiting = acquireResources(project.root, [{...read,mode:"exclusive"}], [], {waitForLocal:true}).then((lease) => { entered=true; return lease; });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(entered).toBe(false);
+    await release();
+    release = await waiting;
+    expect(entered).toBe(true);
+    await expect(acquireResources(project.root,[read],[],{waitForLocal:true,timeoutMs:10})).rejects.toThrow("超时");
+    await release();
+    release = await acquireResources(project.root,[read]);
+  } finally { await release(); project.cleanup(); }
+});

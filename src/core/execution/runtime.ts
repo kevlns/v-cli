@@ -589,9 +589,12 @@ export async function runCapability(
 
   let releaseResources: ResourceLease;
   try {
-    releaseResources = await acquireResources(project.realRoot, entry.descriptor.resources, Object.values(providerBindingDirs));
+    releaseResources = await acquireResources(project.realRoot, entry.descriptor.resources, Object.values(providerBindingDirs), {
+      waitForLocal: true, signal, timeoutMs: entry.descriptor.timeoutMs,
+    });
     store.event("resources-acquired", "已取得跨进程资源租约");
   } catch (error) {
+    if (signal.aborted) return cancelledBeforeExecution();
     return finish({
       command: null,
       execution: { status: "failed", lifecycle: "completed", exitCode: null, signal: null, attempts: 0,
