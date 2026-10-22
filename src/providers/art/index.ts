@@ -269,6 +269,9 @@ const definitions: Definition[] = [
         actor: { type: "string" } as JsonSchema,
         replace: { type: "boolean" } as JsonSchema,
         confirm: { type: "boolean" } as JsonSchema,
+        ...(action === "finalize"
+          ? { name: { type: "string", maxLength: 220 } as JsonSchema }
+          : {}),
       },
       required: [
         "job",
