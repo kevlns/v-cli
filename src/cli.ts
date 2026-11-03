@@ -78,7 +78,7 @@ async function main(): Promise<number> {
       "  1. v-cli agent docs",
       "  2. v-cli agent index --json",
       "  3. v-cli agent describe <name> --json",
-      "  4. v-cli agent init .            （可选：写入工作区 AGENTS.md，AI Agent 自动读取）",
+      "  4. v-cli agent skills --json      （按声明发现运行技能）",
       "",
       "工程执行基座（结构化能力，验收与退出码分离）：",
       "  v-cli project init --project .                    （写入 .vant/config/v-cli.json，幂等补全（已有段不动））",
@@ -87,7 +87,7 @@ async function main(): Promise<number> {
       "  v-cli capability run unity.doctor --project . --json",
       "",
       "详情见 `v-cli agent --help`、`v-cli capability --help`、`v-cli project --help`；",
-      "单命令说明书：`v-cli agent docs --help` / `v-cli agent init --help`。",
+      "单命令说明书：`v-cli agent docs --help` / `v-cli agent export --help`。",
     ].join("\n"),
   );
 

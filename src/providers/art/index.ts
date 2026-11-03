@@ -93,6 +93,14 @@ const definitions: Definition[] = [
   {id:"agent-index",command:["agent","index"],fields:{},readonly:true,global:true},
   {id:"agent-docs",command:["agent","docs"],fields:{},readonly:true,text:true,global:true},
   {id:"agent-init",command:["agent","init"],fields:{directory:file,dry:{type:"boolean"}},required:["directory"],global:true},
+  {id:"agent-export",command:["agent","export"],fields:{directory:file,host:{type:"string",enum:["codex","claude"]},dry:{type:"boolean"}},required:["directory","host"],global:true},
+  ...["start","status","cancel","resume","close"].map((action):Definition=>({
+    id:"conversation-"+action,command:["conversation",action],global:true,
+    fields:action==="start"?{input:file}:{session:identifier,request:identifier},
+    required:action==="start"?["input"]:["session","request"],
+    readonly:action==="status",network:action!=="status",
+  })),
+  ...["style","job"].map((kind):Definition=>({id:kind+"-migration-complete",command:[kind,"migration-complete"],fields:objectFields,required:["id","revision","input"]})),
   {id:"list",command:["list"],fields:{},readonly:true,global:true},
   {id:"style-validate",command:["style","validate"],fields:{report:file},required:["report"],readonly:true},
   {id:"style-show",command:["style","show"],fields:{core:identifier},required:["core"],readonly:true},
@@ -418,7 +426,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
         for (const key of d.positional ?? []) argv.push(resolveInsideProject(ctx.projectAnchor,String(input[key]),"art."+key).path);
         for (const [key, value] of Object.entries(input)) {
           if (key === "handle" || d.positional?.includes(key) || value === false) continue;
-          const actual = ["input", "file", "source", "plan", "out", "report", "mapping", ...(d.id==="agent-init"?["directory"]:[])].includes(key)
+          const actual = ["input", "file", "source", "plan", "out", "report", "mapping", ...(["agent-init","agent-export"].includes(d.id)?["directory"]:[])].includes(key)
             ? resolveInsideProject(
                 ctx.projectAnchor,
                 String(value),
@@ -446,7 +454,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
           if (!output || typeof output !== "object") throw new Error();
         } catch {
           const processState=executionFromProcess(outcome);
-          const uncertain=d.start||d.control||processState.lifecycle==="unknown";
+          const uncertain=d.start||d.control||d.command[0]==="conversation"||processState.lifecycle==="unknown";
           return {
             execution: {
               ...processState,
@@ -464,6 +472,8 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
         }
         let lifecycle: ExecutionLifecycle =
           executionFromProcess(outcome).lifecycle;
+        if (d.command[0] === "conversation" && output.stopConfirmed !== true)
+          lifecycle = "unknown";
         if (typeof output.taskId === "string")
           lifecycle =
             (output.lifecycle as ExecutionLifecycle) ??

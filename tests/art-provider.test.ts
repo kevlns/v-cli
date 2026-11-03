@@ -18,6 +18,34 @@ const config = {
   },
 };
 describe("art controlled execution and lifecycle", () => {
+  it("routes published conversation, export and migration commands with controlled paths and uncertainty", async () => {
+    const project=makeTempProject({config,withProjectVersion:false});
+    const executor=new FakeExecutor(()=>({stdout:JSON.stringify({status:"running",runId:"task-a",stopConfirmed:false})}));
+    const registry=new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+    try {
+      const start=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.conversation-start",input:{input:"request.json"}});
+      expect(start.execution.lifecycle).toBe("unknown");
+      const argv=executor.calls.at(-1)!.args;
+      expect(argv[argv.indexOf("--input")+1]).toBe(join(project.root,"request.json"));
+      expect(argv).not.toContain("--project");
+      for(const action of ["status","cancel","resume","close"]){
+        await runCapability(registry,{projectRoot:project.root,capabilityId:"art.conversation-"+action,input:{session:"session-a",request:"request-a"}});
+        expect(executor.calls.at(-1)!.args.slice(1,3)).toEqual(["conversation",action]);
+      }
+      await runCapability(registry,{projectRoot:project.root,capabilityId:"art.agent-export",input:{directory:"exported",host:"codex",dry:true}});
+      const exported=executor.calls.at(-1)!.args;
+      expect(exported[exported.indexOf("--directory")+1]).toBe(join(project.root,"exported"));
+      for(const kind of ["style","job"]){
+        await runCapability(registry,{projectRoot:project.root,capabilityId:"art."+kind+"-migration-complete",input:{id:"object-a",revision:1,input:"migration.json"}});
+        expect(executor.calls.at(-1)!.args).toContain("--project");
+      }
+      const calls=executor.calls.length;
+      const escaped=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.agent-export",input:{directory:"../outside",host:"codex"}});
+      expect(escaped.execution.status).toBe("failed");
+      expect(executor.calls).toHaveLength(calls);
+    }finally{project.cleanup();}
+  });
   it("routes project favorites and explicit false values without requesting generation", async () => {
     const project=makeTempProject({config,withProjectVersion:false});
     const executor=new FakeExecutor(()=>({stdout:"[]"}));

@@ -107,11 +107,11 @@ v-cli capability describe art.run-resume --json
 ### Agent 文档与技能
 
 ```sh
-v-cli agent init . --dry-run --json
-v-cli agent init .
+v-cli agent skills --json
+v-cli agent export --host codex --directory ./explicit-skill-root --dry-run
 ```
 
-agent init 将随包 AGENTS.md 和技能装配到目标目录下已有的匹配 Agent 技能根。AGENTS.md 已存在时默认整体拒绝；--force 覆盖并完全同步随包技能，先核对目标。默认保留随包没有的项目扩展；同名随包技能文件以随包版本为准。组织层任务历史与资源租约不由此命令管理。
+工具随包维护 skill，Vant 按 v-cli.plugin.json 的声明发现并加载。外部宿主使用显式 agent export，必须指定 host 和已存在的技能根目录。安装和运行不会探测或写入其他 Agent 的目录。
 
 ### 本地插件与 SDK
 
@@ -159,7 +159,7 @@ npm run check
 npm run test:package
 ```
 
-AGENTS.md 从生成源和实际解析的插件清单生成，禁止手改。优先已安装依赖；完全无法解析时才使用 sibling 清单 bootstrap。发布前应以实际依赖检查，不把本地联接当作已发布版本。test:package 检查隔离安装、发现与真实路由，不证明 Unity、付费模型或平台端到端业务成功。
+skills/v-cli/references/project.md 从生成源和实际解析的插件清单生成。AGENTS.md 只约束本仓库开发。优先已安装依赖；完全无法解析时才使用 sibling 清单 bootstrap。发布前应以实际依赖检查，不把本地联接当作已发布版本。test:package 检查隔离安装、发现与真实路由，不证明 Unity、付费模型或平台端到端业务成功。
 
 [架构规范](docs/registration-execution.md) · [身份矩阵](docs/execution-identities.md) · [协议解释](docs/provider-protocols.md) · [扩展与验证](docs/provider-development.md)
 
@@ -177,7 +177,7 @@ npm run test:package
 
 ## 文档
 
-[Agent 调用规范](AGENTS.md) · [文档规范](docs/documentation.md) · [执行身份与生命周期](docs/execution-identities.md) · [Provider 扩展与维护](docs/provider-development.md) · [Provider 协议解释](docs/provider-protocols.md) · [注册与执行架构](docs/registration-execution.md)
+[Agent 调用规范](skills/v-cli/SKILL.md) · [文档规范](docs/documentation.md) · [执行身份与生命周期](docs/execution-identities.md) · [Provider 扩展与维护](docs/provider-development.md) · [Provider 协议解释](docs/provider-protocols.md) · [注册与执行架构](docs/registration-execution.md)
 
 ## 许可与版权
 

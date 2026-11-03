@@ -25,17 +25,14 @@ describe("内置命令契约", () => {
     const agentCmd = builtinCommands.find((c) => c.name === "agent");
     expect(agentCmd?.agent).toBeTruthy();
     const paths = agentCmd!.agent!.commands!.map((c) => c.path.join(" "));
-    for (const p of ["index", "describe", "docs", "init"]) expect(paths).toContain(p);
+    for (const p of ["index", "describe", "docs", "skills", "export"]) expect(paths).toContain(p);
     const docs = agentCmd!.agent!.commands!.find((c) => c.path.join(" ") === "docs")!;
     expect(docs.options?.[0]).toEqual({ flags: "--json", description: "输出 { package, version, sha256, content }" });
     expect(docs.safety).toContain("read-only");
-    const init = agentCmd!.agent!.commands!.find((c) => c.path.join(" ") === "init")!;
-    expect(init.arguments?.[0]?.name).toBe("directory");
-    expect(init.arguments?.[0]?.required).toBe(false);
-    expect(init.exitCodes?.["1"]).toContain("符号链接");
-    expect(init.safety).toEqual(
-      expect.arrayContaining(["refuses-existing", "fail-closed-symlink", "dry-run-supported"]),
-    );
+    const exported = agentCmd!.agent!.commands!.find(c=>c.path.join(" ")==="export")!;
+    expect(exported.options?.map(o=>o.flags)).toContain("--host <name>");
+    expect(exported.options?.map(o=>o.flags)).toContain("--directory <path>");
+    expect(exported.safety).toContain("explicit-target");
   });
 
   it("VERSION 与 package.json 一致", () => {
