@@ -132,10 +132,17 @@ async function main(): Promise<number> {
   }
 }
 
+async function exitAfterOutput(code: number) {
+  // 管道输出异步写入；先排空两路输出，再结束可能持有第三方句柄的 CLI。
+  await Promise.all([process.stdout, process.stderr].map(stream =>
+    new Promise<void>(resolve => {stream.write("", () => resolve());}),
+  ));
+  process.exit(code);
+}
 main().then(
-  (code) => process.exit(code),
+  (code) => exitAfterOutput(code),
   (err) => {
     process.stderr.write(`[v-cli] 未捕获异常: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
-    process.exit(1);
+    return exitAfterOutput(1);
   },
 );
