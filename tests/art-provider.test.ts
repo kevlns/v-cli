@@ -96,13 +96,13 @@ describe("art controlled execution and lifecycle", () => {
       }
     }finally{project.cleanup();}
   });
-  it("rejects missing style report and core before dispatching a backend process", async () => {
+  it("rejects missing core before dispatching a backend process", async () => {
     const project=makeTempProject({config,withProjectVersion:false});
     const executor=new FakeExecutor(()=>({stdout:JSON.stringify({ok:true})}));
     const registry=new CapabilityRegistry();
     registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
     try {
-      for(const [id,field] of [["style-validate","report"],["style-show","core"]]) {
+      for(const [id,field] of [["style-show","core"]]) {
         const schema=registry.describe("art."+id)!.inputSchema;
         expect(schema.type==="object"?schema.required:undefined).toContain(field);
         const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art."+id,input:{}});
@@ -150,19 +150,20 @@ describe("art controlled execution and lifecycle", () => {
       expect(registry.list().some(c=>c.id.startsWith("art.deployment-"))).toBe(false);
     }finally{project.cleanup();}
   });
-  it("routes a style decision through the same controlled project and revision boundary",async()=>{
+  it("routes direct rule updates through project and revision boundaries",async()=>{
     const project=makeTempProject({config,withProjectVersion:false}),executor=new FakeExecutor(()=>({stdout:JSON.stringify({id:"style-a",revision:2,review:{ready:true}})})),registry=new CapabilityRegistry();
     registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
     try{
-      writeFileSync(join(project.root,"decision.json"),JSON.stringify({issueId:"shadow",optionId:"flexible",note:"用户确认"}));
-      const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-resolve",input:{id:"style-a",revision:1,input:"decision.json"}});
+      for(const action of ["analyze","resolve","revise","adopt","validate"])expect(registry.list().some(c=>c.id===`art.style-${action}`)).toBe(false);
+      writeFileSync(join(project.root,"decision.json"),JSON.stringify({config:{rules:[]}}));
+      const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-update",input:{id:"style-a",revision:1,input:"decision.json"}});
       expect(result.execution.status).toBe("succeeded");expect(executor.calls).toHaveLength(1);
-      expect(JSON.stringify(executor.calls[0])).toContain("resolve");
-      const revised=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-revise",input:{id:"style-a",revision:2,input:"decision.json"}});
-      expect(revised.execution.status).toBe("succeeded");expect(JSON.stringify(executor.calls.at(-1))).toContain("revise");
-      expect(registry.describe("art.style-revise")!.sideEffects.some(e=>e.kind==="network")).toBe(false);
+      expect(JSON.stringify(executor.calls[0])).toContain("update");
+      const revised=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-update",input:{id:"style-a",revision:2,input:"decision.json"}});
+      expect(revised.execution.status).toBe("succeeded");expect(JSON.stringify(executor.calls.at(-1))).toContain("update");
+      expect(registry.describe("art.style-update")!.sideEffects.some(e=>e.kind==="network")).toBe(false);
       const beforeInvalid=executor.calls.length;
-      const invalid=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-resolve",input:{id:"style-a",input:"decision.json"}});
+      const invalid=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-update",input:{id:"style-a",input:"decision.json"}});
       expect(invalid.execution.status).toBe("failed");expect(executor.calls).toHaveLength(beforeInvalid);
     }finally{project.cleanup();}
   });
