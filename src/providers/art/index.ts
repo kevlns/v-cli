@@ -165,7 +165,18 @@ const definitions: Definition[] = [
   {id:"style-export",command:["style","export"],fields:{id:identifier,out:file},required:["id","out"]},
   {id:"style-import",command:["style","import"],fields:{file},required:["file"]},
   {id:"style-sources",command:["style","sources"],fields:{input:file},required:["input"],readonly:true,global:true},
-  {id:"style-sample-job",command:["style","sample-job"],fields:{id:identifier,revision,name:{type:"string",minLength:1},count:{type:"integer",minimum:1,maximum:4}},required:["id","revision"]},
+  {
+    id: "style-confirm",
+    command: ["style", "confirm"],
+    fields: { id: identifier, revision },
+    required: ["id", "revision"],
+  },
+  {
+    id: "style-sample-job",
+    command: ["style", "sample-job"],
+    fields: { id: identifier, revision, input: file, name: { type: "string", minLength: 1 }, count: { type: "integer", minimum: 1, maximum: 4 } },
+    required: ["id", "revision"],
+  },
   {id:"style-sample-select",command:["style","sample-select"],fields:{id:identifier,revision,job:identifier,run:identifier,candidate:{type:"string",pattern:"^[a-f0-9]{64}$"},note:{type:"string",maxLength:2000}},required:["id","revision","job","run","candidate"]},
   {id:"style-sample-remove",command:["style","sample-remove"],fields:{id:identifier,revision,sample:identifier},required:["id","revision","sample"]},
   {

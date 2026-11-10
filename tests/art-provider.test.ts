@@ -46,14 +46,15 @@ describe("art controlled execution and lifecycle", () => {
       expect(executor.calls).toHaveLength(calls);
     }finally{project.cleanup();}
   });
-  it("routes style sample management with revisions without starting generation", async () => {
+  it("routes style confirmation and a project-bound sample scheme without starting generation", async () => {
     const project=makeTempProject({config,withProjectVersion:false});
     const executor=new FakeExecutor(()=>({stdout:JSON.stringify({ok:true})}));
     const registry=new CapabilityRegistry();
     registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
     try {
       const cases = [
-        ["sample-job", {id:"style-a",revision:3,name:"Style probes",count:4}],
+        ["confirm", {id:"style-a",revision:2}],
+        ["sample-job", {id:"style-a",revision:3,name:"Style probes",count:4,input:"sample-scheme.json"}],
         ["sample-select", {id:"style-a",revision:3,job:"task-a",run:"task-run",candidate:"a".repeat(64),note:"Approved drawing language"}],
         ["sample-remove", {id:"style-a",revision:4,sample:"sample-a"}],
       ] as const;
@@ -63,11 +64,17 @@ describe("art controlled execution and lifecycle", () => {
         const argv=executor.calls.at(-1)!.args;
         expect(argv.slice(1,3)).toEqual(["style",action]);
         expect(argv[argv.indexOf("--revision")+1]).toBe(String(input.revision));
-        if (action === "sample-job") expect(argv[argv.indexOf("--count")+1]).toBe("4");
+        if (action === "sample-job") {
+          expect(argv[argv.indexOf("--count")+1]).toBe("4");
+          expect(argv[argv.indexOf("--input")+1]).toBe(join(project.root,"sample-scheme.json"));
+        }
         expect(argv).not.toContain("--background");
         expect(registry.describe("art.style-"+action)!.sideEffects.some(e=>e.kind==="network")).toBe(false);
       }
       const before=executor.calls.length;
+      const escaped=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-sample-job",input:{id:"style-a",revision:3,input:"../sample-scheme.json"}});
+      expect(escaped.execution.status).toBe("failed");
+      expect(executor.calls).toHaveLength(before);
       const invalid=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-sample-select",input:{id:"style-a",revision:3,job:"task-a",run:"task-run",candidate:"invalid"}});
       expect(invalid.execution.status).toBe("failed");
       expect(executor.calls).toHaveLength(before);
