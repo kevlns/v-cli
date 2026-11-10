@@ -17,7 +17,13 @@ export interface ProjectRoot {
   root: string;
   /** 工程根 realpath（包含关系判定的基准） */
   realRoot: string;
+  /** 宿主拥有的 .vant 数据根；业务代码始终使用 root。 */
+  storageRoot: string;
+  realStorageRoot: string;
 }
+
+/** SDK 显式支持独立代码根与 .vant 数据根。 */
+export const PROJECT_STORAGE_ROOT_VERSION = 1;
 
 export class PathSafetyError extends Error {
   readonly code: string;
@@ -34,8 +40,15 @@ function isPlainAbsolute(input: string): boolean {
 }
 
 /** 解析并锚定工程根；不存在/不是目录时抛出 */
-export function resolveProjectRoot(input?: string, cwd: string = process.cwd()): ProjectRoot {
+export function resolveProjectRoot(input?: string, cwd: string = process.cwd(), options: { storageRoot?: string } = {}): ProjectRoot {
   const root = path.resolve(cwd, input ?? ".");
+  const { realRoot } = resolveRootDirectory(root);
+  const storageRoot = path.resolve(cwd, options.storageRoot ?? root);
+  const { realRoot: realStorageRoot } = resolveRootDirectory(storageRoot);
+  return { root, realRoot, storageRoot, realStorageRoot };
+}
+
+function resolveRootDirectory(root: string): { realRoot: string } {
   let stat: fs.Stats;
   try {
     stat = fs.statSync(root);
@@ -54,7 +67,7 @@ export function resolveProjectRoot(input?: string, cwd: string = process.cwd()):
       `工程根无法解析 realpath: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  return { root, realRoot };
+  return { realRoot };
 }
 
 /** 拆分相对路径为段；非法即抛 */
@@ -110,9 +123,13 @@ export function resolveInsideProject(
     return { path: project.root, realPath: project.realRoot };
   }
   const segments = splitSafeRelative(relative, label);
-  const target = path.join(project.root, ...segments);
+  const owned = segments.map(segment => process.platform === "win32" ? segment.toLowerCase() : segment);
+  const storage = owned[0] === ".vant" && owned[1] !== "rules" && !(owned.length === 2 && owned[1] === "rules.md");
+  const root = storage ? project.storageRoot : project.root;
+  const realRoot = storage ? project.realStorageRoot : project.realRoot;
+  const target = path.join(root, ...segments);
 
-  const existingAncestor = deepestExisting(target, project.realRoot);
+  const existingAncestor = deepestExisting(target, realRoot);
   let ancestorReal: string;
   try {
     ancestorReal = fs.realpathSync.native(existingAncestor);
@@ -122,7 +139,7 @@ export function resolveInsideProject(
       `${label} 无法解析 realpath: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  if (!isInside(project.realRoot, ancestorReal)) {
+  if (!isInside(realRoot, ancestorReal)) {
     throw new PathSafetyError(
       "path-escape",
       `${label} 解析后逃逸工程根（${relative} → ${ancestorReal}）`,
@@ -136,7 +153,7 @@ export function resolveInsideProject(
       throw new PathSafetyError("path-symlink", `${label} 是符号链接/联接，拒绝写入或跟随: ${target}`);
     }
     realPath = fs.realpathSync.native(target);
-    if (!isInside(project.realRoot, realPath)) {
+    if (!isInside(realRoot, realPath)) {
       throw new PathSafetyError("path-escape", `${label} 的真实路径逃逸工程根: ${realPath}`);
     }
   }

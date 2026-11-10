@@ -47,7 +47,7 @@ export interface ExecutionHandle {
   originOperationId: string;
   backendTaskId: string | null;
   /** 目标工程身份（v-cli 解析的 realpath + 配置文件路径） */
-  project: { root: string; configFile: string };
+  project: { root: string; configFile: string; codeRoot?: string; storageRoot?: string };
   startedAt: string;
   /** false = 未落盘启动（--no-persist），不可跨进程恢复 */
   recoverable: boolean;
@@ -88,7 +88,8 @@ export function buildExecutionHandle(input: {
     capabilityId: input.capabilityId,
     originOperationId: input.operationId,
     backendTaskId: input.seed.backendTaskId,
-    project: { root: input.project.realRoot, configFile: input.configFile },
+    project: { root: input.project.realRoot, codeRoot: input.project.realRoot,
+      storageRoot: input.project.realStorageRoot, configFile: input.configFile },
     startedAt: input.startedAt,
     recoverable: input.persisted,
     recordDir: `${OPERATIONS_RELATIVE}/${input.operationId}`,
@@ -114,6 +115,8 @@ export type HandleVerification =
       };
       /** 已通过的身份核对项（写入验收证据） */
       checks: string[];
+      /** 原启动身份，只读恢复时不改写为当前业务 checkout。 */
+      originProject: ExecutionHandle["project"];
     }
   | { ok: false; code: string; errors: string[] };
 
@@ -167,6 +170,12 @@ export function verifyExecutionHandle(input: {
   if (!isPlainObject(handle.project) || typeof handle.project.root !== "string" || typeof handle.project.configFile !== "string") {
     return fail("handle-invalid", ["句柄 project.root/configFile 必须是字符串"]);
   }
+  if (Object.keys(handle.project).some(key => !["root", "configFile", "codeRoot", "storageRoot"].includes(key))
+      || (handle.project.codeRoot === undefined) !== (handle.project.storageRoot === undefined)
+      || handle.project.codeRoot !== undefined && (typeof handle.project.codeRoot !== "string" || !handle.project.codeRoot
+        || typeof handle.project.storageRoot !== "string" || !handle.project.storageRoot
+        || comparePathForm(handle.project.codeRoot) !== comparePathForm(handle.project.root)))
+    return fail("handle-invalid", ["句柄代码根和存储根必须完整且与原启动身份一致"]);
   if (!isPlainObject(handle.integrity) || handle.integrity.algo !== "sha256" || typeof handle.integrity.digest !== "string") {
     return fail("handle-invalid", ["句柄 integrity 缺失或非法"]);
   }
@@ -188,10 +197,12 @@ export function verifyExecutionHandle(input: {
     ]);
   }
 
-  // 目标工程身份：不信任调用方提交的工程路径——句柄工程必须是当前锚定工程
-  if (comparePathForm((handle.project as { root: string }).root) !== comparePathForm(project.realRoot)) {
+  // 老记录以其唯一 root 作为原存储身份；从同一存储读取证据不授予
+  // 原 checkout 的业务代码权限，也不将原身份改写成当前 checkout。
+  const handleStorageRoot = String(handle.project.storageRoot ?? handle.project.root);
+  if (comparePathForm(handleStorageRoot) !== comparePathForm(project.realStorageRoot)) {
     return fail("handle-project-mismatch", [
-      `句柄工程 ${(handle.project as { root: string }).root} 与当前工程 ${project.realRoot} 不一致：拒绝执行`,
+      `句柄存储 ${handleStorageRoot} 与当前存储 ${project.realStorageRoot} 不一致：拒绝执行`,
     ]);
   }
 
@@ -258,7 +269,12 @@ export function verifyExecutionHandle(input: {
   if (recordProject !== undefined && comparePathForm(String(recordProject.root ?? "")) !== comparePathForm(handle.project.root)) {
     mismatches.push("project.root 与记录不一致");
   } else if (recordProject !== undefined) checks.push("project.root");
+  if (recordProject !== undefined && (comparePathForm(String(recordProject.storageRoot ?? recordProject.root ?? "")) !== comparePathForm(handleStorageRoot)
+      || comparePathForm(String(recordProject.codeRoot ?? recordProject.root ?? "")) !== comparePathForm(String(handle.project.codeRoot ?? handle.project.root))
+      || comparePathForm(String(recordProject.configFile ?? "")) !== comparePathForm(handle.project.configFile)))
+    mismatches.push("project.codeRoot/storageRoot/configFile 与记录不一致");
   if (recordHandle !== undefined) {
+    if (canonicalize(recordHandle.project) !== canonicalize(handle.project)) mismatches.push("handle.project 与原句柄不一致");
     if (recordHandle.backendTaskId !== handle.backendTaskId) {
       mismatches.push(
         `backendTaskId: 记录 ${JSON.stringify(recordHandle.backendTaskId)} ≠ 句柄 ${JSON.stringify(handle.backendTaskId)}（关联已失效或被其他任务替代）`,
@@ -297,5 +313,6 @@ export function verifyExecutionHandle(input: {
           : null,
     },
     checks,
+    originProject: { ...handle.project } as ExecutionHandle["project"],
   };
 }

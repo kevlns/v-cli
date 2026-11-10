@@ -5,7 +5,7 @@
  * 流程：npm pack 生成 tgz → 在隔离临时 prefix 中做一次真实 `npm install --global`，
  * 官方依赖 xlmerge / u-cli-mod / figma-to-uprefab / ship-cli / art-workshop 由 registry
  * 正常解析安装 → 通过 npm 生成的 bin wrapper（非直接运行 dist/cli.mjs）执行 CLI，断言：
- *   - `--version` 为 0.6.0；
+ *   - `--version` 为 0.7.0；
  *   - `plugin list --json` 报告 xlmerge available；unity 在 win32 为 available、
  *     非 win32 为 platform-mismatch；figma 同样遵循 Windows 平台门禁；
  *   - `agent index --json` / `agent describe --json` 暴露官方清单全量元数据
@@ -30,8 +30,8 @@ import { createHash } from "node:crypto";
 
 const ROOT = process.cwd();
 const IS_WIN = process.platform === "win32";
-const VERSION = "0.6.0";
-const XL_VERSION = "2.0.4";
+const VERSION = "0.7.0";
+const XL_VERSION = "2.0.5";
 const UNITY_VERSION = "0.3.1";
 const FIGMA_VERSION = "0.1.4";
 const STREAM_CAP = 4000;
@@ -188,7 +188,7 @@ function smoke(filename) {
     const runOpts = { cwd: work, env };
     {
       const artRows = JSON.parse(cliExpectOk(prefix, ["plugin", "list", "--json"], runOpts));
-      assert(artRows.some(row => row.name === "art" && row.status === "available" && row.version === "0.5.0"), "美术工坊没有被自动发现");
+      assert(artRows.some(row => row.name === "art" && row.status === "available" && row.version === "0.6.0"), "美术工坊没有被自动发现");
       const artDesc = JSON.parse(cliExpectOk(prefix, ["agent", "describe", "art", "--json"], runOpts));
       const artManifest = JSON.parse(fs.readFileSync(path.join(path.dirname(installedDepPath(prefix, "@kevlns/art-workshop")), "v-cli.plugin.json"), "utf8"));
       assert(artDesc.commands?.length === artManifest.agent.commands.length, "美术工坊命令发现不完整");
@@ -196,7 +196,7 @@ function smoke(filename) {
         assert(hasFullMeta(artDesc.commands?.find(c => c.path.join(" ") === command)), "美术工坊清单缺少 " + command);
       const artDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "art", "--json"], runOpts));
       assert(artDocs.package === "@kevlns/art-workshop" && artDocs.sha256 === sha256(artDocs.content), "美术工坊随包规范读取失败");
-      assert(cliExpectOk(prefix, ["art", "--version"], runOpts).trim() === "0.5.0", "美术工坊版本路由失败");
+      assert(cliExpectOk(prefix, ["art", "--version"], runOpts).trim() === "0.6.0", "美术工坊版本路由失败");
       assert(cliExpectOk(prefix, ["art", "--help"], runOpts).includes("generate"), "美术工坊帮助路由失败");
       const settings = JSON.parse(cliExpectOk(prefix, ["art", "config", "show"], runOpts));
       assert(settings.file === artConfig && settings.paths.workspace === work, "美术工坊未使用同一份外部本地配置");
@@ -209,8 +209,7 @@ function smoke(filename) {
       assert(shipRows.some(row => row.name === "ship" && row.status === "available" && row.version === "0.1.2"), "ship 没有被自动发现");
       const shipDesc = JSON.parse(cliExpectOk(prefix, ["agent", "describe", "ship", "--json"], runOpts));
       assert(hasFullMeta(shipDesc.commands?.find(c => c.path.join(" ") === "wx push")), "ship wx push 清单元数据不完整");
-      const shipDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "ship", "--json"], runOpts));
-      assert(shipDocs.package === "@kevlns/ship-cli" && shipDocs.sha256 === sha256(shipDocs.content), "ship 随包规范读取失败");
+      assert(cliRun(prefix,["agent","docs","ship","--json"],runOpts).status !== 0,"未声明运行技能的 ship 应明确拒绝");
       assert(cliExpectOk(prefix, ["ship", "--version"], runOpts).trim() === "0.1.2", "ship 路由未到真实插件");
       assert(cliExpectOk(prefix, ["ship", "wx", "push", "--help"], runOpts).includes("--version <text>"), "ship 上传参数与工具版本参数未解耦");
       console.log("[test:package] ship: 自动发现、完整清单、规范哈希、真实命令路由通过");
@@ -257,8 +256,7 @@ function smoke(filename) {
     } else {
       assert(figmaRow?.status === "platform-mismatch", "agent index figma 应报告平台不匹配");
     }
-    const figmaDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "figma", "--json"], runOpts));
-    assert(figmaDocs.version === FIGMA_VERSION && figmaDocs.content.includes("Node 不执行源数据到 IR 的转换"), "figma Agent 规范不符");
+    assert(cliRun(prefix,["agent","docs","figma","--json"],runOpts).status !== 0,"未声明运行技能的 figma 应明确拒绝");
     if (IS_WIN) {
       assert(cliExpectOk(prefix, ["figma", "--version"], runOpts).trim() === FIGMA_VERSION, "figma 路由版本不符");
       const figmaHelp = cliExpectOk(prefix, ["figma", "--help"], runOpts);
@@ -374,8 +372,8 @@ function smoke(filename) {
     `,path.join(installedPkgRoot,"dist/sdk.mjs"),path.join(ROOT,"tests/fixtures/art-style")], {encoding:"utf8",cwd:work,env,timeout:60000});
     assert(transferProbe.includes("installed-style-transfer-ok"), "安装版结构化风格导出、来源扫描和幂等导入失败");
     console.log("[test:package] 安装版 SDK 实际执行冻结风格导出、来源扫描、导入与幂等校验通过");
-    const installedDocs = fs.readFileSync(path.join(installedPkgRoot, "AGENTS.md"), "utf-8");
-    const repoDocs = fs.readFileSync(path.join(ROOT, "AGENTS.md"), "utf-8");
+    const installedDocs = fs.readFileSync(path.join(installedPkgRoot, "skills/v-cli/SKILL.md"), "utf-8");
+    const repoDocs = fs.readFileSync(path.join(ROOT, "skills/v-cli/SKILL.md"), "utf-8");
     assert(installedDocs === repoDocs, "安装包内 AGENTS.md 与仓库 AGENTS.md 不一致");
     const authorsNote = cliExpectOk(prefix, ["agent", "docs"], runOpts);
     assert(authorsNote === installedDocs, "agent docs stdout 与安装包内 AGENTS.md 不一致（应逐字节相等）");
@@ -386,38 +384,30 @@ function smoke(filename) {
     );
     assert(docsJson.content === installedDocs, "agent docs --json content 与安装包内 AGENTS.md 不一致");
     assert(docsJson.sha256 === sha256(installedDocs), "agent docs --json sha256 与 content 不一致");
-    const xlDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "xlmerge", "--json"], runOpts));
-    assert(
-      xlDocs.package === "@kevlns/xlmerge" && xlDocs.version === XL_VERSION,
-      `agent docs xlmerge 身份 = ${xlDocs.package}@${xlDocs.version}`,
-    );
-    assert(xlDocs.content.includes("不默认走无头自动合并"), "xlmerge AGENTS.md 缺少 UI-first 规范");
-    const unityDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "unity", "--json"], runOpts));
-    assert(
-      unityDocs.package === "@kevlns/u-cli-mod" && unityDocs.version === UNITY_VERSION,
-      `agent docs unity 身份 = ${unityDocs.package}@${unityDocs.version}`,
-    );
-    assert(unityDocs.content.includes("首次对某工程执行 `exec` 前"), "u-cli-mod AGENTS.md 缺少首次就绪规范");
+    const declared=JSON.parse(cliExpectOk(prefix,["agent","skills","--json"],runOpts));
+    for(const skill of declared.skills){
+      const docs=JSON.parse(cliExpectOk(prefix,["agent","docs",skill.tool,"--json"],runOpts));
+      assert(docs.content.startsWith("---"),"运行技能必须使用frontmatter");
+      assert(docs.sha256===sha256(docs.content),"技能文档哈希不一致");
+    }
     const topHelp = cliExpectOk(prefix, ["--help"], runOpts);
     for (const line of [
       "AI Agent 快速开始",
       "1. v-cli agent docs",
       "2. v-cli agent index --json",
       "3. v-cli agent describe <name> --json",
-      "4. v-cli agent init .",
+      "4. v-cli agent skills --json",
     ]) {
       assert(topHelp.includes(line), `安装版 --help 缺少 ${line}`);
     }
     const agentHelp = cliExpectOk(prefix, ["agent", "--help"], runOpts);
-    assert(agentHelp.includes("docs") && agentHelp.includes("init"), "安装版 agent --help 缺少 docs/init");
+    assert(agentHelp.includes("docs") && agentHelp.includes("export"), "安装版 agent --help 缺少 docs/export");
     const docsHelp = cliExpectOk(prefix, ["agent", "docs", "--help"], runOpts);
     for (const line of ["sha256", "v-cli agent docs xlmerge --json"]) {
       assert(docsHelp.includes(line), `安装版 agent docs --help 缺少 ${line}`);
     }
-    const initHelp = cliExpectOk(prefix, ["agent", "init", "--help"], runOpts);
-    for (const line of ["--force", "--dry-run", "默认当前工作目录"]) {
-      assert(initHelp.includes(line), `安装版 agent init --help 缺少 ${line}`);
-    }
+    const exportHelp=cliExpectOk(prefix,["agent","export","--help"],runOpts);
+    assert(exportHelp.includes("--host") && exportHelp.includes("--directory"),"显式导出缺少宿主或目标");
 
     return `test:package OK — ${filename} 真实全局安装后 wrapper 冒烟全绿：--version=${version}，xlmerge@${XL_VERSION} available，unity@${UNITY_VERSION} / figma@${FIGMA_VERSION} ${IS_WIN ? "available" : "platform-mismatch（fail-closed 已断言）"}，agent docs sha256=${sha256(installedDocs).slice(0, 12)}…，help 发现 AI Agent 快速开始`;
   } finally {

@@ -84,6 +84,7 @@ type Definition = {
   text?: boolean;
   positional?: string[];
   global?: boolean;
+  channel?: "image" | "video";
 };
 const objectFields = { id: identifier, revision, input: file };
 const definitions: Definition[] = [
@@ -93,6 +94,10 @@ const definitions: Definition[] = [
   {id:"agent-index",command:["agent","index"],fields:{},readonly:true,global:true},
   {id:"agent-docs",command:["agent","docs"],fields:{},readonly:true,text:true,global:true},
   {id:"agent-init",command:["agent","init"],fields:{directory:file,dry:{type:"boolean"}},required:["directory"],global:true},
+  {id:"agent-export",command:["agent","export"],fields:{directory:file,host:{type:"string",enum:["codex","claude"]},dry:{type:"boolean"}},required:["directory","host"],global:true},
+  {id:"conversation-start",command:["conversation","start"],fields:{input:file},required:["input"],network:true,global:true},
+  ...["status","cancel","resume","close"].map((action):Definition=>({id:"conversation-"+action,command:["conversation",action],fields:{session:{type:"string",minLength:1},request:{type:"string",minLength:1}},required:["session","request"],readonly:action==="status",network:action!=="status",global:true})),
+  ...["style","job"].map((kind):Definition=>({id:kind+"-migration-complete",command:[kind,"migration-complete"],fields:objectFields,required:["id","revision","input"]})),
   {id:"list",command:["list"],fields:{},readonly:true,global:true},
   {id:"style-validate",command:["style","validate"],fields:{report:file},required:["report"],readonly:true},
   {id:"style-show",command:["style","show"],fields:{core:identifier},required:["core"],readonly:true},
@@ -169,6 +174,9 @@ const definitions: Definition[] = [
   {id:"style-import",command:["style","import"],fields:{file},required:["file"]},
   {id:"style-sources",command:["style","sources"],fields:{input:file},required:["input"],readonly:true,global:true},
   {id:"style-revise",command:["style","revise"],fields:objectFields,required:["id","revision","input"]},
+  {id:"style-sample-job",command:["style","sample-job"],fields:{id:identifier,revision,name:{type:"string",minLength:1},count:{type:"integer",minimum:1,maximum:4}},required:["id","revision"]},
+  {id:"style-sample-select",command:["style","sample-select"],fields:{id:identifier,revision,job:identifier,run:identifier,candidate:{type:"string",pattern:"^[a-f0-9]{64}$"},note:{type:"string",maxLength:2000}},required:["id","revision","job","run","candidate"]},
+  {id:"style-sample-remove",command:["style","sample-remove"],fields:{id:identifier,revision,sample:identifier},required:["id","revision","sample"]},
   {id:"style-resolve",command:["style","resolve"],fields:objectFields,required:["id","revision","input"]},
   {
     id: "style-adopt",
@@ -286,6 +294,29 @@ const definitions: Definition[] = [
   {id:"candidate-favorites",command:["candidate","favorites"],fields:{},readonly:true},
   {id:"candidate-favorite",command:["candidate","favorite"],fields:{job:identifier,run:identifier,candidate:{type:"string",pattern:"^[a-f0-9]{64}$"},value:{type:"string",enum:["true","false"]}},required:["job","run","candidate","value"]},
 ];
+// Keep the legacy art.* identities stable. Channel aliases invoke the same image
+// implementation through its explicit CLI namespace, with no second executor.
+const imageDefinitions: Definition[] = definitions.map((definition) => ({
+  ...definition, channel: "image", command: ["image", ...definition.command],
+}));
+const videoActions = [
+  "describe", "snapshot", "settings.get", "settings.save", "settings.presets.h3",
+  "runtime.status", "runtime.start", "runtime.stop", "task.list", "task.read",
+  "task.create", "task.rename", "task.archive", "operation.create", "operation.update",
+  "operation.rename", "operation.derive", "operation.validate", "operation.run",
+  "operation.resume", "operation.cancel", "operation.accept", "operation.bind",
+  "script.read", "script.update", "script.plan", "script.apply", "film.compose",
+  "film.refine", "film.preview", "film.adopt", "film.undo", "material.list",
+  "material.import", "material.import-file", "material.upload", "material.hide", "image", "media.status", "execution.status",
+];
+const videoReads = new Set(["describe", "snapshot", "settings.get", "settings.presets.h3", "runtime.status", "task.list", "task.read", "operation.validate", "script.read", "script.plan", "material.list", "image", "media.status", "execution.status"]);
+const videoNoInput = new Set(["describe", "snapshot", "settings.get", "settings.presets.h3", "runtime.status", "runtime.start", "runtime.stop", "task.list", "material.list", "media.status"]);
+const videoNetwork = new Set(["describe", "snapshot", "settings.get", "settings.save", "runtime.status", "runtime.start", "runtime.stop", "operation.create", "operation.update", "operation.derive", "operation.validate", "operation.run", "operation.resume", "operation.cancel", "script.plan", "script.apply", "film.refine"]);
+const videoDefinitions: Definition[] = videoActions.map((action): Definition => ({
+  id: "video-" + action.replaceAll(".", "-"), channel: "video", command: ["video", ...action.split(".")],
+  fields: action === "execution.status" ? { operation: {type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"} } : { input: file }, required: action === "execution.status" ? ["operation"] : videoNoInput.has(action) ? [] : ["input"],
+  readonly: videoReads.has(action), network: videoNetwork.has(action), global: true,
+}));
 export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
   const discover =
     deps.discoverBackend ??
@@ -293,9 +324,9 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
       discoverOfficialPlugin(
         OFFICIAL_PLUGINS.find((s) => s.command === "art")!,
       ));
-  const registrations: CapabilityRegistration[] = definitions.map((d) => ({
+  const registrations: CapabilityRegistration[] = [...definitions, ...imageDefinitions, ...videoDefinitions].map((d) => ({
     descriptor: {
-      id: "art." + d.id,
+      id: "art." + (d.channel === "image" ? "image-" : "") + d.id,
       commands: [d.command],
       version: "0.1.0",
       description:
@@ -361,11 +392,14 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
         strategy: "none",
         description: "启动不自动重试；恢复查询原句柄",
       },
-      timeoutMs: d.id === "environment-prepare" ? 1800000 : ["environment-verify", "environment-register"].includes(d.id) ? 7200000 : 90000,
-      tags: ["art", "lifecycle"],
+      timeoutMs: d.channel === "video" ? 15 * 60 * 1000 : d.id === "environment-prepare" ? 1800000 : ["environment-verify", "environment-register"].includes(d.id) ? 7200000 : 90000,
+      tags: ["art", d.channel || "image", "lifecycle"],
     },
     implementation: {
       execute: async (input, ctx) => {
+        const businessCommand = d.channel === "image" ? d.command.slice(1) : d.command;
+        const videoAction = d.channel === "video" ? d.command.slice(1).join(".") : null;
+        let videoInput: Record<string, unknown> = {};
         const backend = discover();
         const fail = (code: string, message: string) => ({
           execution: {
@@ -385,9 +419,11 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
         if(d.start&&input.plan){
           const file=resolveInsideProject(ctx.projectAnchor,String(input.plan),"art.plan").path;
           const plan=JSON.parse(readFileSync(file,"utf8"));
-          if(plan.project!==ctx.binding.projectId||plan.module!==d.command[0])return fail("art-plan-scope-mismatch","计划不属于当前 art 工程或执行类型");
+          if(plan.project!==ctx.binding.projectId||plan.module!==businessCommand[0])return fail("art-plan-scope-mismatch","计划不属于当前 art 工程或执行类型");
         }
-        const argv = [
+        const argv = d.channel === "video" ? [
+          ...d.command, "--workspace", ctx.projectAnchor.storageRoot, "--project", String(ctx.binding.projectId),
+        ] : [
           ...d.command,
           "--workspace",
           ctx.bindingDirs.workspace,
@@ -398,7 +434,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
           "--config",
           path.join(ctx.bindingDirs.workspace, "settings.json"),
         ];
-        if (!d.global && !d.control && !(d.command[1] === "run" && input.plan))
+        if (!d.global && !d.control && !(businessCommand[1] === "run" && input.plan))
           argv.push("--project", String(ctx.binding.projectId));
         if (d.control) {
           const verification = verifyExecutionHandle({
@@ -412,31 +448,39 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
             return fail("art-handle-missing", "句柄缺少后端运行身份");
           const origin=JSON.parse(readFileSync(resolveInsideProject(ctx.projectAnchor,verification.record.recordDir+"/result.json","art.origin").path,"utf8"));
           if(origin.output?.result?.project!==ctx.binding.projectId||["workspace","output","cache"].some(key=>origin.project?.bindingDirs?.art?.[key]!==ctx.bindingDirs?.[key]))return fail("art-handle-binding-changed","运行身份与当前工程绑定不同；请恢复原绑定后操作");
-          argv.splice(2, 0, verification.record.backendTaskId);
+          argv.splice(d.command.length, 0, verification.record.backendTaskId);
         }
         if (d.id === "run-wait" && input.timeout === undefined) argv.push("--timeout", "30");
         for (const key of d.positional ?? []) argv.push(resolveInsideProject(ctx.projectAnchor,String(input[key]),"art."+key).path);
         for (const [key, value] of Object.entries(input)) {
           if (key === "handle" || d.positional?.includes(key) || value === false) continue;
-          const actual = ["input", "file", "source", "plan", "out", "report", "mapping", ...(d.id==="agent-init"?["directory"]:[])].includes(key)
+          const actual = ["input", "file", "source", "plan", "out", "report", "mapping", ...(["agent-init","agent-export"].includes(d.id)?["directory"]:[])].includes(key)
             ? resolveInsideProject(
                 ctx.projectAnchor,
                 String(value),
                 "art." + key,
               ).path
             : value;
+          if(d.channel === "video" && key === "input") {
+            try {
+              const parsed = JSON.parse(readFileSync(String(actual), "utf8"));
+              if(!parsed || typeof parsed !== "object" || Array.isArray(parsed))return fail("art-video-input-invalid", "视频请求文件必须为 JSON 对象");
+              videoInput = parsed;
+            } catch(error) { return fail("art-video-input-invalid", error instanceof Error ? error.message : "无法读取视频请求文件"); }
+          }
           argv.push("--" + key);
           if (value !== true) argv.push(String(actual));
         }
         if(d.start&&d.id!=="run-recover"&&!input.dry)argv.push("--operation",ctx.operationId);
-        if (d.start && d.command[1] === "run" && !input.dry)
+        if(d.channel === "video" && !d.readonly)argv.push("--operation",ctx.operationId);
+        if (d.start && businessCommand[1] === "run" && !input.dry)
           argv.push("--background");
         const outcome = await deps.executor.run({
           file: process.execPath,
           args: [backend.bin, ...argv],
           cwd: ctx.projectAnchor.root,
           env: deps.env,
-          timeoutMs: d.id === "environment-prepare" ? 1800000 : ["environment-verify", "environment-register"].includes(d.id) ? 7200000 : 90000,
+          timeoutMs: d.channel === "video" ? 15 * 60 * 1000 : d.id === "environment-prepare" ? 1800000 : ["environment-verify", "environment-register"].includes(d.id) ? 7200000 : 90000,
           signal: ctx.signal,
         });
         let output: Record<string, unknown>;
@@ -446,7 +490,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
           if (!output || typeof output !== "object") throw new Error();
         } catch {
           const processState=executionFromProcess(outcome);
-          const uncertain=d.start||d.control||processState.lifecycle==="unknown";
+          const uncertain=d.start||d.control||businessCommand[0]==="conversation"||d.channel === "video" && !d.readonly||processState.lifecycle==="unknown";
           return {
             execution: {
               ...processState,
@@ -464,6 +508,19 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
         }
         let lifecycle: ExecutionLifecycle =
           executionFromProcess(outcome).lifecycle;
+        if(businessCommand[0] === "conversation" && output.stopConfirmed !== true)lifecycle = "unknown";
+        if(d.channel === "video" && output.unknown === true)lifecycle = "unknown";
+        if(d.channel === "video" && output.ok !== false && ["operation.run", "operation.resume", "operation.cancel"].includes(videoAction || "")) {
+          const operations = Array.isArray(output.operations) ? output.operations as Record<string, unknown>[] : [];
+          const operation = operations.find(value => value.id === videoInput.operationId);
+          const runs = Array.isArray(operation?.runs) ? operation.runs as Record<string, unknown>[] : [];
+          const run = videoInput.requestId ? runs.find(value => value.requestId === videoInput.requestId) : videoInput.runId ? runs.find(value => value.id === videoInput.runId) : runs.at(-1);
+          lifecycle = output.id !== videoInput.taskId || !run || typeof run.id !== "string" || !run.id || typeof run.requestId !== "string" || !run.requestId || run.status === "unknown" ? "unknown" : ["dispatching", "running"].includes(String(run.status)) ? "accepted" : run.status === "succeeded" || run.cancelled === true && run.stopConfirmed === true ? "completed" : "failed";
+        }
+        if(videoAction === "execution.status") {
+          if(output.unknown === true || ["unknown", "executing"].includes(String(output.status)))lifecycle = "unknown";
+          else if(output.status === "submitted")lifecycle = "accepted";
+        }
         if (typeof output.taskId === "string")
           lifecycle =
             (output.lifecycle as ExecutionLifecycle) ??

@@ -18,6 +18,66 @@ const config = {
   },
 };
 describe("art controlled execution and lifecycle", () => {
+  it("routes published conversation, export and migration commands with controlled paths and uncertainty", async () => {
+    const project=makeTempProject({config,withProjectVersion:false});
+    const executor=new FakeExecutor(()=>({stdout:JSON.stringify({status:"running",runId:"task-a",stopConfirmed:false})}));
+    const registry=new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+    try {
+      const start=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.conversation-start",input:{input:"request.json"}});
+      expect(start.execution.lifecycle).toBe("unknown");
+      const argv=executor.calls.at(-1)!.args;
+      expect(argv[argv.indexOf("--input")+1]).toBe(join(project.root,"request.json"));
+      expect(argv).not.toContain("--project");
+      for(const action of ["status","cancel","resume","close"]){
+        await runCapability(registry,{projectRoot:project.root,capabilityId:"art.conversation-"+action,input:{session:"session-a",request:"request-a"}});
+        expect(executor.calls.at(-1)!.args.slice(1,3)).toEqual(["conversation",action]);
+      }
+      await runCapability(registry,{projectRoot:project.root,capabilityId:"art.agent-export",input:{directory:"exported",host:"codex",dry:true}});
+      const exported=executor.calls.at(-1)!.args;
+      expect(exported[exported.indexOf("--directory")+1]).toBe(join(project.root,"exported"));
+      for(const kind of ["style","job"]){
+        await runCapability(registry,{projectRoot:project.root,capabilityId:"art."+kind+"-migration-complete",input:{id:"object-a",revision:1,input:"migration.json"}});
+        expect(executor.calls.at(-1)!.args).toContain("--project");
+      }
+      const calls=executor.calls.length;
+      const escaped=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.agent-export",input:{directory:"../outside",host:"codex"}});
+      expect(escaped.execution.status).toBe("failed");
+      expect(executor.calls).toHaveLength(calls);
+    }finally{project.cleanup();}
+  });
+  it("routes style sample management with revisions without starting generation", async () => {
+    const project=makeTempProject({config,withProjectVersion:false});
+    const executor=new FakeExecutor(()=>({stdout:JSON.stringify({ok:true})}));
+    const registry=new CapabilityRegistry();
+    registry.registerProvider(createArtProvider({executor,discoverBackend:()=>fakeBackend({package:"@kevlns/art-workshop",name:"art"})}));
+    try {
+      const cases = [
+        ["sample-job", {id:"style-a",revision:3,name:"Style probes",count:4}],
+        ["sample-select", {id:"style-a",revision:3,job:"task-a",run:"task-run",candidate:"a".repeat(64),note:"Approved drawing language"}],
+        ["sample-remove", {id:"style-a",revision:4,sample:"sample-a"}],
+      ] as const;
+      for (const [action,input] of cases) {
+        const result=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-"+action,input});
+        expect(result.execution.status).toBe("succeeded");
+        const argv=executor.calls.at(-1)!.args;
+        expect(argv.slice(1,3)).toEqual(["style",action]);
+        expect(argv[argv.indexOf("--revision")+1]).toBe(String(input.revision));
+        if (action === "sample-job") expect(argv[argv.indexOf("--count")+1]).toBe("4");
+        expect(argv).not.toContain("--background");
+        expect(registry.describe("art.style-"+action)!.sideEffects.some(e=>e.kind==="network")).toBe(false);
+      }
+      const before=executor.calls.length;
+      const invalid=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-sample-select",input:{id:"style-a",revision:3,job:"task-a",run:"task-run",candidate:"invalid"}});
+      expect(invalid.execution.status).toBe("failed");
+      expect(executor.calls).toHaveLength(before);
+      for (const count of [0, 5, 1.5]) {
+        const invalidCount=await runCapability(registry,{projectRoot:project.root,capabilityId:"art.style-sample-job",input:{id:"style-a",revision:3,count}});
+        expect(invalidCount.execution.status).toBe("failed");
+        expect(executor.calls).toHaveLength(before);
+      }
+    } finally {project.cleanup();}
+  });
   it("routes project favorites and explicit false values without requesting generation", async () => {
     const project=makeTempProject({config,withProjectVersion:false});
     const executor=new FakeExecutor(()=>({stdout:"[]"}));

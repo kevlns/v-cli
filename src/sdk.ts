@@ -96,6 +96,7 @@ export { NodeProcessExecutor } from "./core/execution/executor";
 export type { ProcessExecutor, ProcessInvocation, ProcessOutcome } from "./core/execution/executor";
 
 export { createDefaultRegistry, type DefaultRegistryOptions } from "./default-registry";
+export { discoverToolSkills, readRuntimeSkill, exportToolSkill, type ToolSkill } from "./core/skills";
 
 export {
   JSON_TYPES,
@@ -144,6 +145,7 @@ export {
 } from "./core/project/config";
 
 export {
+  PROJECT_STORAGE_ROOT_VERSION,
   PathSafetyError,
   resolveInsideProject,
   resolveProjectRoot,

@@ -43,12 +43,14 @@ import { loadProjectConfig, PROJECT_CLI_CONFIG_RELATIVE, toProviderSet, type Res
 import { buildExecutionHandle, validateHandleSeed, type ExecutionHandle } from "./handle";
 import { generateOperationId, OperationExistsError, OperationStore, validateOperationId } from "../project/operation-store";
 import { redactSecrets } from "../project/redact";
-import { PathSafetyError, resolveProjectRoot, type ProjectRoot } from "../project/paths";
+import { PathSafetyError, resolveInsideProject, resolveProjectRoot, type ProjectRoot } from "../project/paths";
 
 export interface CapabilityRunRequest {
   capabilityId: string;
   /** 显式工程根（--project）；缺省用 cwd */
   projectRoot?: string;
+  /** 宿主拥有的 .vant 数据根；未指定时与 projectRoot 相同。 */
+  storageRoot?: string;
   cwd?: string;
   input?: Record<string, unknown>;
   operationId?: string;
@@ -271,6 +273,8 @@ function buildResult(input: BuildInput): CapabilityRunResult {
     },
     project: {
       root: input.project.realRoot,
+      codeRoot: input.project.realRoot,
+      storageRoot: input.project.realStorageRoot,
       configFile: input.configFile,
       bindingDirs: input.bindingDirs,
     },
@@ -325,7 +329,7 @@ export async function runCapability(
 
   let project: ProjectRoot;
   try {
-    project = resolveProjectRoot(request.projectRoot, request.cwd ?? process.cwd());
+    project = resolveProjectRoot(request.projectRoot, request.cwd ?? process.cwd(), { storageRoot: request.storageRoot });
   } catch (err) {
     if (err instanceof PathSafetyError) {
       throw new CapabilityError(structuredError(err.code, "request", err.message));
@@ -376,7 +380,7 @@ export async function runCapability(
     schemaVersion: 1,
     operationId,
     capability: { id: entry.descriptor.id, version: entry.descriptor.version },
-    project: { root: project.realRoot, configFile: loadedConfig.file },
+    project: { root: project.realRoot, codeRoot: project.realRoot, storageRoot: project.realStorageRoot, configFile: loadedConfig.file },
     taskId: request.taskId ?? null,
     runId: request.runId ?? null,
     recordedAt: startedAt.toISOString(),
@@ -589,7 +593,8 @@ export async function runCapability(
 
   let releaseResources: ResourceLease;
   try {
-    releaseResources = await acquireResources(project.realRoot, entry.descriptor.resources, Object.values(providerBindingDirs), {
+    releaseResources = await acquireResources(project.realRoot, entry.descriptor.resources,
+      [...Object.values(providerBindingDirs), resolveInsideProject(project, ".vant", "工程数据").path], {
       waitForLocal: true, signal, timeoutMs: entry.descriptor.timeoutMs,
     });
     store.event("resources-acquired", "已取得跨进程资源租约");

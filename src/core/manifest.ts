@@ -34,6 +34,7 @@ export interface PluginManifest {
   runtime: Record<string, unknown>;
   environment: { name: string; description: string }[];
   agent: AgentMeta;
+  skills?: {id:string;path:string}[];
 }
 
 export type ManifestValidation =
@@ -152,6 +153,21 @@ export function validateManifest(input: unknown): ManifestValidation {
         }
       }
     });
+  }
+
+  if (m.skills !== undefined) {
+    if (!Array.isArray(m.skills)) errors.push("skills 必须是数组");
+    else {
+      const seen = new Set<string>();
+      m.skills.forEach((skill, i) => {
+        if (!isPlainObject(skill) || typeof skill.id !== "string" || !COMMAND_NAME_RE.test(skill.id) ||
+          typeof skill.path !== "string" || !/^skills\/[a-z0-9-]+\/SKILL\.md$/.test(skill.path)) {
+          errors.push(`skills[${i}] 标识或入口路径无效`); return;
+        }
+        if (seen.has(skill.id)) errors.push(`skills[${i}] 标识重复`);
+        seen.add(skill.id);
+      });
+    }
   }
 
   // agent

@@ -1,58 +1,11 @@
-import path from "node:path";
+import { discoverToolSkills, readRuntimeSkill, exportToolSkill } from "../core/skills";
 import type { Command } from "commander";
 import type { CliCommand } from "../core/command";
 import type { CliContext } from "../core/context";
 import { builtinCommands } from "./index";
-import { loadLocalPlugins } from "../core/loader";
+import { loadLocalPlugins, type LoadedCommand } from "../core/loader";
 import { discoverAllOfficialPlugins, type OfficialPluginInfo } from "../core/official";
-import type { LoadedCommand } from "../core/loader";
-import {
-  BUNDLED_DOCS_PACKAGE,
-  performAgentInit,
-  readBundledAgentsMd,
-  readOfficialAgentsMd,
-  type BundledDocs,
-} from "../core/agent-docs";
-import {
-  performAgentSkillAssembly,
-  readSkillSource,
-  type SkillAssemblyTarget,
-} from "../core/agent-skill";
 import { VERSION } from "../version";
-
-/** agent init 的 skill 装配结果（并入 init 的 --json 输出） */
-type InitSkillOutcome =
-  | {
-      status: "assembled" | "skipped-none";
-      assembled: SkillAssemblyTarget[];
-      name: string;
-      sha256: string;
-      bytes: number;
-    }
-  | { status: "skipped-source-missing"; reason: string }
-  | { status: "skipped-init-failed" };
-
-/** skill 装配结果的文本摘要 */
-function skillOutcomeText(outcome: InitSkillOutcome, dryRun: boolean): string {
-  const verb = dryRun ? "将装配到" : "已装配到";
-  switch (outcome.status) {
-    case "assembled": {
-      const dirs = outcome.assembled.map((t) => t.dir).join(", ");
-      const refreshed = outcome.assembled.filter((t) => t.localModified).map((t) => t.dir);
-      const note =
-        refreshed.length > 0
-          ? `；其中 ${refreshed.length} 个本地已修改的 SKILL.md 已按随包版本刷新（同目录扩展文件保留）：${refreshed.join(", ")}`
-          : "";
-      return `[skill v-cli] ${verb} ${outcome.assembled.length} 个 agent 目录：${dirs}${note}`;
-    }
-    case "skipped-none":
-      return "[skill v-cli] 未检测到匹配的 agent 技能目录，跳过装配";
-    case "skipped-source-missing":
-      return `[skill v-cli] 跳过装配（源缺失）：${outcome.reason}`;
-    case "skipped-init-failed":
-      return "[skill v-cli] 跳过装配（AGENTS.md 未就绪）";
-  }
-}
 
 /** agent index 行：统一 builtin/local/official 三类命令的索引记录 */
 export interface AgentRowCommandMeta {
@@ -99,7 +52,7 @@ export function buildAgentIndex(
       description: cmd.description,
       metadataStatus: cmd.agent ? "full" : "minimal",
       whenToUse: cmd.agent?.whenToUse,
-      globalOptions: cmd.agent?.globalOptions,
+    globalOptions: cmd.agent?.globalOptions,
       commands: cmd.agent?.commands,
     });
   }
@@ -181,88 +134,17 @@ function describeCommandLine(c: AgentRowCommandMeta): string {
   return `  ${pathText} — ${c.description}${c.usage ? ` (用法: ${c.usage})` : ""}${argText}${optText}${outputText}${exitText}${safeText}`;
 }
 
-const AGENT_HELP_TEXT = [
-  "agent 子命令一览：",
-  "  index    列出全部命令（builtin/local/official）与 agent 元数据；--json 输出稳定 JSON 数组",
-  "  describe 查看单个命令的完整记录（用法/参数/选项/输出/退出码/安全标签）；--json 输出单条记录",
-  "  docs     无参输出 v-cli AGENTS.md；传 <command> 输出已安装官方插件包内 AGENTS.md",
-  "  init     把内置 AGENTS.md 写入工作区（默认当前目录）；已存在默认拒绝，--force 覆盖，--dry-run 预览",
-  "",
-  "JSON：所有子命令支持 --json（或前置全局 --json，如 v-cli --json agent index）",
-  "",
-  "AI Agent 快速开始（推荐顺序）：",
-  "  1. v-cli agent docs",
-  "  2. v-cli agent index --json",
-  "  3. v-cli agent describe <name> --json",
-  "  4. v-cli agent init .          （可选：写入工作区 AGENTS.md，AI Agent 自动读取）",
-  "",
-  "示例：",
-  "  v-cli agent index --json            # 全量命令索引",
-  "  v-cli agent describe ts --json      # 单命令详情",
-  "  v-cli agent docs                    # v-cli 瘦索引原文",
-  "  v-cli agent docs unity              # u-cli-mod 包内使用规范",
-  "  v-cli agent docs xlmerge --json     # xlmerge 包内规范（JSON）",
-  "  v-cli agent init . --dry-run        # 预览初始化目标",
-].join("\n");
-
-const DOCS_HELP_TEXT = [
-  "输出 AGENTS.md 原文（逐字节原样输出、不追加换行）。",
-  "  省略 [command]：当前 @kevlns/v-cli 包内置瘦索引。",
-  "  传入 [command]：已安装官方插件包根 AGENTS.md（如 unity / xlmerge）。",
-  "",
-  "参数：",
-  "  [command]  official 插件命令名；先用 v-cli agent index --json 查看",
-  "",
-  "JSON 行为（--json 或前置全局 --json）：",
-  "  成功：stdout 输出稳定对象 { package, version, sha256, content }",
-  "  失败：stdout 输出稀疏对象 { ok: false, error }，stderr 再输出同一 error，退出码 1",
-  "",
-  "退出码：0 成功；1 命令未知 / 插件未安装 / AGENTS.md 缺失或不可读",
-  "",
-  "示例：",
-  "  v-cli agent docs",
-  "  v-cli agent docs unity",
-  "  v-cli agent docs xlmerge --json",
-].join("\n");
-
-const INIT_HELP_TEXT = [
-  "把当前 @kevlns/v-cli 包内置 AGENTS.md 原样写入 <目录>/AGENTS.md，AI Agent 会自动读取工作区文档；",
-  "同时把随包发布的 v-cli skill（skills/v-cli）装配到 <目录> 下匹配的 agent 技能目录（如 .claude/skills、.agent/skill、AgentHome/skills 等），无匹配目录则跳过。",
-  "",
-  "参数：",
-  "  [directory]  目标目录，默认当前工作目录；必须已存在且为目录",
-  "",
-  "默认行为（无 --force）：目标已存在 AGENTS.md 时拒绝并退出 1，绝不改动现有文件。",
-  "  --force    覆盖已存在的 AGENTS.md；skill 目录做完全同步（清掉扩展文件）（原子写入：同目录临时文件 + rename）",
-  "  skill 同步  随包版本是规范唯一权威：同名 SKILL.md 一律按随包版本刷新（本地修改会被覆盖并提示）；",
-  "             目标目录中随包没有的文件（项目扩展，如 PROJECT.md）默认保留，--force 时完全同步。",
-  "  --dry-run  只报告目标与将执行的动作，不写入任何文件",
-  "  --json     成功/干跑输出稳定 JSON { ok, dryRun, action, directory, target, package, version, sha256, bytes }；",
-  "             拒绝（如已存在未加 --force）输出 { ok: false, action: \"refused\", reason, … } 且退出 1；",
-  "             内置文档缺失时输出稀疏 { ok: false, error } 且退出 1",
-  "  符号链接规则：目标 AGENTS.md 是符号链接一律拒绝（fail-closed：不跟随、不覆盖链接目标）；",
-  "             显式传入的目录本身是符号链接/联接目录（junction）也拒绝；省略目录参数（默认当前工作目录）不受此限制",
-  "",
-  "退出码：0 成功或干跑；1 目录无效 / 已存在未加 --force / 符号链接或联接目标 / 内置文档缺失 / 写入失败",
-  "",
-  "示例：",
-  "  v-cli agent init",
-  "  v-cli agent init ./myproj",
-  "  v-cli agent init --dry-run",
-  "  v-cli agent init --force",
-  "  v-cli agent init --json",
-].join("\n");
+const AGENT_HELP_TEXT = "运行规范：agent docs [工具]；受管技能：agent skills --json。外部宿主只能通过 agent export --host --directory 显式导出。";
+const DOCS_HELP_TEXT = "输出清单声明的 SKILL.md 原文；--json 包含 sha256/content。示例：v-cli agent docs xlmerge --json。AGENTS.md 只面向工具仓库开发。";
 
 /** agent：命令索引 / 单命令详情 / 内置引导文档 / 工作区初始化 */
 export const agent: CliCommand = {
   name: "agent",
-  description: "agent：index 命令索引，describe 详情，docs 内置 AGENTS.md，init 工作区引导",
+  description: "发现命令与运行技能，显式导出宿主适配",
   apiVersion: 1,
 
   agent: {
-    whenToUse:
-      "当用户需要 AGENTS 引导文档、命令发现或为 AI Agent 初始化工作区时：先 `docs` 读内置 AGENTS.md，" +
-      "再 `index --json` 枚举全部命令与元数据，用 `describe <name> --json` 看单命令详情，最后可 `init` 把 AGENTS.md 写入工作区",
+    whenToUse: "发现命令用 index/describe；运行规范用 docs；外部适配使用显式 export。",
     globalOptions: [
       { flags: "-h, --help", description: "显示命令帮助" },
     ],
@@ -293,44 +175,27 @@ export const agent: CliCommand = {
       {
         path: ["docs"],
         usage: "v-cli agent docs [command] [--json]",
-        description: "无参输出 v-cli AGENTS.md；传 command 输出官方插件包内 AGENTS.md",
+        description: "读取工具声明的运行技能入口",
         arguments: [{ name: "command", required: false, description: "官方插件命令名（如 unity、xlmerge）" }],
         options: [{ flags: "--json", description: "输出 { package, version, sha256, content }" }],
         output: {
           format: "stdout",
-          description: "AGENTS.md 原文逐字节输出到 stdout；--json 时输出含 sha256/content 的稳定 JSON",
+          description: "SKILL.md 原文逐字节输出到 stdout；--json 时输出含 sha256/content 的稳定 JSON",
         },
-        exitCodes: { "0": "成功", "1": "命令未知 / 插件未安装 / AGENTS.md 缺失或不可读" },
+        exitCodes: { "0": "成功", "1": "命令未知 / 插件未安装 / SKILL.md 缺失或不可读" },
         safety: ["read-only", "no-network"],
       },
       {
-        path: ["init"],
-        usage: "v-cli agent init [directory] [--force] [--dry-run] [--json]",
-        description: "初始化 <目录>：写入 AGENTS.md 并装配 v-cli skill 到匹配的 agent 技能目录；默认当前目录；已存在默认拒绝",
-        arguments: [
-          { name: "directory", required: false, description: "目标目录（默认当前工作目录；须已存在且为目录）" },
-        ],
-        options: [
-          { flags: "--force", description: "覆盖已存在的 AGENTS.md；skill 目录做完全同步（清掉扩展文件）" },
-          { flags: "--dry-run", description: "只报告目标与动作，不写入" },
-          { flags: "--json", description: "输出机器可读结果" },
-        ],
-        output: {
-          format: "stdout",
-          description: "结果文本输出到 stdout；--json 时输出稳定 JSON（ok/dryRun/action/directory/target/package/version/sha256/bytes 及 skill 装配结果）",
-        },
-        exitCodes: {
-          "0": "成功或干跑",
-          "1": "目录无效 / 已存在未覆盖 / 符号链接或联接目标 / 文档缺失 / 写入失败",
-        },
-        safety: [
-          "writes-target-atomic",
-          "refuses-existing",
-          "fail-closed-symlink",
-          "dry-run-supported",
-          "no-commit",
-          "assembles-skill",
-        ],
+        path: ["skills"], usage: "v-cli agent skills [--json]", description: "列出受管工具声明的技能",
+        arguments: [], options: [{flags:"--json",description:"JSON 输出"}],
+        output:{format:"json",description:"技能来源与诊断"},exitCodes:{"0":"成功"},safety:["read-only","no-network"],
+      },
+      {
+        path: ["export"], usage: "v-cli agent export [command] --host <codex|claude> --directory <path> [--dry-run] [--json]",
+        description: "向指定目录导出运行技能和显式宿主适配",
+        arguments: [{name:"command",required:false,description:"工具名，默认 v-cli"}],
+        options:[{flags:"--host <name>",description:"显式宿主"},{flags:"--directory <path>",description:"已有技能根目录"},{flags:"--dry-run",description:"只预览"},{flags:"--json",description:"JSON 输出"}],
+        output:{format:"json",description:"导出文件与目标"},exitCodes:{"0":"成功","1":"非法目标或来源"},safety:["explicit-target","no-network"],
       },
     ],
   },
@@ -393,23 +258,23 @@ export const agent: CliCommand = {
 
     program
       .command("docs")
-      .description("无参输出 v-cli AGENTS.md；传 command 输出官方插件包内 AGENTS.md")
+      .description("读取工具声明的运行技能入口")
       .argument("[command]", "官方插件命令名（如 unity、xlmerge）")
       .option("--json", "输出机器可读 JSON（含 sha256/content）")
       .addHelpText("after", DOCS_HELP_TEXT)
       .action((command: string | undefined, opts: { json?: boolean }) => {
         const json = ctx.json || opts.json;
-        let docs: BundledDocs;
-        let packageName = BUNDLED_DOCS_PACKAGE;
+        let docs: ReturnType<typeof readRuntimeSkill>;
+        let packageName = "@kevlns/v-cli";
         let version = VERSION;
         try {
           if (command) {
-            const pluginDocs = readOfficialAgentsMd(command);
+            const pluginDocs = readRuntimeSkill(command);
             docs = pluginDocs;
             packageName = pluginDocs.package;
             version = pluginDocs.version;
           } else {
-            docs = readBundledAgentsMd();
+            docs = readRuntimeSkill();
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -427,95 +292,20 @@ export const agent: CliCommand = {
           });
           return;
         }
-        // 文本模式：逐字节原样输出（AGENTS.md 以换行结尾，不再追加）
+        // 原样输出技能入口。
         process.stdout.write(docs.content);
       });
 
-    program
-      .command("init")
-      .description("初始化 <目录>/AGENTS.md（默认当前目录）；已存在默认拒绝，--force 覆盖，--dry-run 预览")
-      .argument("[directory]", "目标目录（默认当前工作目录；必须已存在且为目录）")
-      .option("--force", "覆盖已存在的 AGENTS.md；skill 目录做完全同步（清掉扩展文件）")
-      .option("--dry-run", "只报告目标与动作，不写入任何文件")
-      .option("--json", "输出机器可读结果")
-      .addHelpText("after", INIT_HELP_TEXT)
-      .action(
-        (directory: string | undefined, opts: { force?: boolean; dryRun?: boolean; json?: boolean }) => {
-          const json = ctx.json || opts.json;
-          let docs: BundledDocs;
-          try {
-            docs = readBundledAgentsMd();
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            if (json) ctx.log.result({ ok: false, error: message });
-            ctx.log.error(message);
-            process.exitCode = 1;
-            return;
-          }
-          const resolvedDir = path.resolve(directory ?? process.cwd());
-          const result = performAgentInit({
-            directory: resolvedDir,
-            docs,
-            force: opts.force,
-            dryRun: opts.dryRun,
-            // 显式传入目录才做目录符号链接/联接 fail-closed；默认 cwd 不受限
-            explicitDirectory: directory !== undefined,
-          });
-
-          // skill 装配（额外职能）：仅在 init 成功后执行；源缺失降级为跳过，不阻断 init
-          let skillOutcome: InitSkillOutcome;
-          if (result.ok) {
-            try {
-              const source = readSkillSource();
-              const skill = performAgentSkillAssembly({
-                directory: resolvedDir,
-                source,
-                dryRun: opts.dryRun,
-                force: opts.force,
-              });
-              skillOutcome =
-                skill.assembled.length > 0
-                  ? {
-                      status: "assembled",
-                      assembled: skill.assembled,
-                      name: skill.skill.name,
-                      sha256: skill.skill.sha256,
-                      bytes: skill.skill.bytes,
-                    }
-                  : {
-                      status: "skipped-none",
-                      assembled: [],
-                      name: skill.skill.name,
-                      sha256: skill.skill.sha256,
-                      bytes: skill.skill.bytes,
-                    };
-            } catch (err) {
-              skillOutcome = {
-                status: "skipped-source-missing",
-                reason: err instanceof Error ? err.message : String(err),
-              };
-            }
-          } else {
-            skillOutcome = { status: "skipped-init-failed" };
-          }
-
-          if (json) {
-            ctx.log.result({ ...result, skill: skillOutcome });
-            if (!result.ok && result.reason) ctx.log.error(result.reason);
-            if (!result.ok) process.exitCode = 1;
-            return;
-          }
-          if (!result.ok) {
-            if (result.reason) ctx.log.error(result.reason);
-            process.exitCode = 1;
-            return;
-          }
-          const head = result.dryRun
-            ? `[dry-run] 将${result.action === "overwrite" ? "覆盖" : "写入"} ${result.target}（${result.bytes} 字节）`
-            : `已${result.action === "overwritten" ? "覆盖" : "写入"} ${result.target}（${result.bytes} 字节，SHA-256 ${result.sha256.slice(0, 12)}…）`;
-          ctx.log.result([head, skillOutcomeText(skillOutcome, result.dryRun)].join("\n"));
-        },
-      );
+    program.command("skills").description("列出受管工具声明的技能")
+      .option("--json", "JSON 输出").action(()=>ctx.log.result(discoverToolSkills()));
+    program.command("export").description("显式导出外部宿主技能")
+      .argument("[command]").requiredOption("--host <name>").requiredOption("--directory <path>")
+      .option("--dry-run").option("--json")
+      .action((command: string | undefined, opts: {host:string;directory:string;dryRun?:boolean}) =>
+        ctx.log.result(exportToolSkill(command, opts)));
+    program.command("init").description("已迁移：使用 project init")
+      .argument("[directory]").option("--json").option("--dry-run").option("--force")
+      .action(()=>{throw new Error("agent init 已迁移；项目使用 v-cli project init，外部宿主使用 agent export --host --directory。");});
 
     program.addHelpText("after", AGENT_HELP_TEXT);
   },

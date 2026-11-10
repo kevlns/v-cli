@@ -78,7 +78,7 @@ async function main(): Promise<number> {
       "  1. v-cli agent docs",
       "  2. v-cli agent index --json",
       "  3. v-cli agent describe <name> --json",
-      "  4. v-cli agent init .            （可选：写入工作区 AGENTS.md，AI Agent 自动读取）",
+      "  4. v-cli agent skills --json      （按声明发现运行技能）",
       "",
       "工程执行基座（结构化能力，验收与退出码分离）：",
       "  v-cli project init --project .                    （写入 .vant/config/v-cli.json，幂等补全（已有段不动））",
@@ -87,7 +87,7 @@ async function main(): Promise<number> {
       "  v-cli capability run unity.doctor --project . --json",
       "",
       "详情见 `v-cli agent --help`、`v-cli capability --help`、`v-cli project --help`；",
-      "单命令说明书：`v-cli agent docs --help` / `v-cli agent init --help`。",
+      "单命令说明书：`v-cli agent docs --help` / `v-cli agent export --help`。",
     ].join("\n"),
   );
 
@@ -132,10 +132,17 @@ async function main(): Promise<number> {
   }
 }
 
+async function exitAfterOutput(code: number) {
+  // 管道输出异步写入；先排空两路输出，再结束可能持有第三方句柄的 CLI。
+  await Promise.all([process.stdout, process.stderr].map(stream =>
+    new Promise<void>(resolve => {stream.write("", () => resolve());}),
+  ));
+  process.exit(code);
+}
 main().then(
-  (code) => process.exit(code),
+  (code) => exitAfterOutput(code),
   (err) => {
     process.stderr.write(`[v-cli] 未捕获异常: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
-    process.exit(1);
+    return exitAfterOutput(1);
   },
 );

@@ -253,7 +253,7 @@ export type LoadProjectConfigResult =
 
 /** 读取并校验工程级 v-cli 配置（外壳 + 各 Provider 绑定契约 + 路径强核对） */
 export function loadProjectConfig(project: ProjectRoot, providers: ProviderSet): LoadProjectConfigResult {
-  const file = path.join(project.root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+  const file = path.join(project.storageRoot, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
   const initHint = `请先在工程根运行 \`v-cli project init --project <工程根>\` 生成 ${PROJECT_CLI_CONFIG_RELATIVE}`;
 
   let text: string;
@@ -430,8 +430,8 @@ export function initProjectConfig(
   overrides: Record<string, Record<string, unknown>> = {},
   options: { reset?: boolean; dryRun?: boolean } = {},
 ): InitProjectConfigResult {
-  const file = path.join(project.root, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
-  const vantFile = path.join(project.root, ...VANT_PROJECT_CONFIG_RELATIVE.split("/"));
+  const file = path.join(project.storageRoot, ...PROJECT_CLI_CONFIG_RELATIVE.split("/"));
+  const vantFile = path.join(project.storageRoot, ...VANT_PROJECT_CONFIG_RELATIVE.split("/"));
   const vantConfig = { file: vantFile, exists: fs.existsSync(vantFile) };
   const refused = (reason: string): InitProjectConfigResult => ({
     ok: false,
@@ -566,7 +566,7 @@ export function initProjectConfig(
 
   let backupPath: string | undefined;
   if (reset && exists && !dryRun) {
-    const backupDir = path.join(project.root, ...CONFIG_BACKUP_RELATIVE.split("/"));
+    const backupDir = path.join(project.storageRoot, ...CONFIG_BACKUP_RELATIVE.split("/"));
     resolveInsideProject(project, CONFIG_BACKUP_RELATIVE, CONFIG_BACKUP_RELATIVE);
     fs.mkdirSync(backupDir, { recursive: true });
     const stamp = `${new Date().toISOString().replace(/[:.]/g, "-")}-${process.pid.toString(36)}`;
@@ -579,7 +579,7 @@ export function initProjectConfig(
       atomicWriteConfig(project, file, rendered.content);
     } else {
       // 新建：wx 双保险（存在性检查与独占创建）
-      const configDir = path.join(project.root, ".vant", "config");
+      const configDir = path.join(project.storageRoot, ".vant", "config");
       resolveInsideProject(project, ".vant/config", ".vant/config");
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(file, rendered.content, { encoding: "utf-8", flag: "wx" });
@@ -731,7 +731,7 @@ export function inspectProject(project: ProjectRoot, providers: ProviderSet): Pr
     }
   }
 
-  const vantDir = path.join(project.root, ".vant");
+  const vantDir = path.join(project.storageRoot, ".vant");
   let configFiles: string[] = [];
   const configDir = path.join(vantDir, "config");
   if (fs.existsSync(configDir)) {
@@ -741,7 +741,7 @@ export function inspectProject(project: ProjectRoot, providers: ProviderSet): Pr
       configFiles = [];
     }
   }
-  const stateDir = path.join(project.root, ...OPERATIONS_RELATIVE.split("/"));
+  const stateDir = path.join(project.storageRoot, ...OPERATIONS_RELATIVE.split("/"));
   let operationCount = 0;
   if (fs.existsSync(stateDir)) {
     try {
@@ -750,7 +750,7 @@ export function inspectProject(project: ProjectRoot, providers: ProviderSet): Pr
       operationCount = 0;
     }
   }
-  const vantFile = path.join(project.root, ...VANT_PROJECT_CONFIG_RELATIVE.split("/"));
+  const vantFile = path.join(project.storageRoot, ...VANT_PROJECT_CONFIG_RELATIVE.split("/"));
 
   let bindingsValue: Record<string, unknown> = {};
   if (loaded.ok) bindingsValue = loaded.config.bindings;

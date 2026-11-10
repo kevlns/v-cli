@@ -248,6 +248,8 @@ export interface LogRef {
 export interface ProjectBindingInfo {
   /** 工程根绝对路径（realpath） */
   root: string;
+  codeRoot: string;
+  storageRoot: string;
   /** .vant/config/v-cli.json 绝对路径 */
   configFile: string;
   /** 已安全解析的绑定路径（provider id -> 字段名 -> 绝对路径） */

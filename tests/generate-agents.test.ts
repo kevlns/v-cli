@@ -139,7 +139,7 @@ describe("generate-agents.mjs", () => {
     );
     const r = spawnSync(process.execPath, [GENERATOR], { cwd: dir, encoding: "utf-8" });
     expect(r.status).toBe(0);
-    const content = fs.readFileSync(path.join(dir, "AGENTS.md"), "utf-8");
+    const content = fs.readFileSync(path.join(dir, "skills/v-cli/references/project.md"), "utf-8");
     expect(content).toContain("未安装");
     expect(content).toContain("v-cli agent index --json");
     // 未安装模式下，与已生成的 bootstrap 内容相比必然漂移
@@ -181,7 +181,7 @@ describe("generate-agents.mjs", () => {
     const r = spawnSync(process.execPath, [GENERATOR], { cwd: repoDir, encoding: "utf-8" });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("sibling 清单回退");
-    const content = fs.readFileSync(path.join(repoDir, "AGENTS.md"), "utf-8");
+    const content = fs.readFileSync(path.join(repoDir, "skills/v-cli/references/project.md"), "utf-8");
     // 两个插件齐全、带版本行与按需文档/实时参数入口，不内联命令树
     expect(content).toContain("**版本**：1.2.1-beta.2");
     expect(content).toContain("**版本**：0.1.0-beta.2");
@@ -194,7 +194,7 @@ describe("generate-agents.mjs", () => {
     // 复位后第二次运行字节一致（确定性）
     const r2 = spawnSync(process.execPath, [GENERATOR], { cwd: repoDir, encoding: "utf-8" });
     expect(r2.status).toBe(0);
-    expect(fs.readFileSync(path.join(repoDir, "AGENTS.md"), "utf-8")).toBe(content);
+    expect(fs.readFileSync(path.join(repoDir, "skills/v-cli/references/project.md"), "utf-8")).toBe(content);
   });
 
   it("默认模式：已安装官方依赖优先于 sibling 回退（installed 胜出）", () => {
@@ -228,7 +228,7 @@ describe("generate-agents.mjs", () => {
     const r = spawnSync(process.execPath, [GENERATOR], { cwd: repoDir, encoding: "utf-8" });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("installed deps 模式");
-    const content = fs.readFileSync(path.join(repoDir, "AGENTS.md"), "utf-8");
+    const content = fs.readFileSync(path.join(repoDir, "skills/v-cli/references/project.md"), "utf-8");
     expect(content).toContain("**版本**：1.2.1-beta.2");
     expect(content).not.toContain("9.9.9");
   });

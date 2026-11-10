@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "package": "@kevlns/v-cli",
+  "command": "v-cli",
+  "bin": "v-cli",
+  "description": "提供工具发现、插件路由、工程绑定、结构化能力执行和操作证据管理。",
+  "platforms": [
+    "win32",
+    "linux",
+    "darwin"
+  ],
+  "runtime": {
+    "node": ">=20"
+  },
+  "environment": [],
+  "skills": [
+    {
+      "id": "v-cli",
+      "path": "skills/v-cli/SKILL.md"
+    }
+  ],
+  "agent": {
+    "whenToUse": "发现工具与能力，执行结构化操作",
+    "globalOptions": [],
+    "commands": []
+  }
+}
