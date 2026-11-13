@@ -5,12 +5,12 @@
  * 流程：npm pack 生成 tgz → 在隔离临时 prefix 中做一次真实 `npm install --global`，
  * 官方依赖 xlmerge / u-cli-mod / figma-to-uprefab / ship-cli / art-workshop 由 registry
  * 正常解析安装 → 通过 npm 生成的 bin wrapper（非直接运行 dist/cli.mjs）执行 CLI，断言：
- *   - `--version` 为 0.7.3；
+ *   - `--version` 为 0.7.4；
  *   - `plugin list --json` 报告 xlmerge available；unity 在 win32 为 available、
  *     非 win32 为 platform-mismatch；figma 同样遵循 Windows 平台门禁；
  *   - `agent index --json` / `agent describe --json` 暴露官方清单全量元数据
  *     （arguments/options/output/exitCodes/safety）；
- *   - `agent docs` 逐字节输出安装包内 AGENTS.md，`agent docs --json` 给出
+ *   - `agent docs` 逐字节输出安装包内 SKILL.md，`agent docs --json` 给出
  *     package/version/sha256/content 且哈希自洽（test:package 的 docs 断言）；
  *   - `--help` / `agent --help` / `agent init --help` 中可发现 AI Agent 快速开始
  *     与推荐顺序（help 是 agent 的发现入口）；
@@ -30,10 +30,10 @@ import { createHash } from "node:crypto";
 
 const ROOT = process.cwd();
 const IS_WIN = process.platform === "win32";
-const VERSION = "0.7.3";
-const XL_VERSION = "2.0.5";
-const UNITY_VERSION = "0.3.1";
-const FIGMA_VERSION = "0.1.4";
+const VERSION = "0.7.4";
+const XL_VERSION = "2.0.6";
+const UNITY_VERSION = "0.3.2";
+const FIGMA_VERSION = "0.1.5";
 const STREAM_CAP = 4000;
 
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -208,11 +208,10 @@ function smoke(filename) {
     }
     {
       const shipRows = JSON.parse(cliExpectOk(prefix, ["plugin", "list", "--json"], runOpts));
-      assert(shipRows.some(row => row.name === "ship" && row.status === "available" && row.version === "0.1.2"), "ship 没有被自动发现");
+      assert(shipRows.some(row => row.name === "ship" && row.status === "available" && row.version === "0.1.3"), "ship 没有被自动发现");
       const shipDesc = JSON.parse(cliExpectOk(prefix, ["agent", "describe", "ship", "--json"], runOpts));
       assert(hasFullMeta(shipDesc.commands?.find(c => c.path.join(" ") === "wx push")), "ship wx push 清单元数据不完整");
-      assert(cliRun(prefix,["agent","docs","ship","--json"],runOpts).status !== 0,"未声明运行技能的 ship 应明确拒绝");
-      assert(cliExpectOk(prefix, ["ship", "--version"], runOpts).trim() === "0.1.2", "ship 路由未到真实插件");
+      assert(cliExpectOk(prefix, ["ship", "--version"], runOpts).trim() === "0.1.3", "ship 路由未到真实插件");
       assert(cliExpectOk(prefix, ["ship", "wx", "push", "--help"], runOpts).includes("--version <text>"), "ship 上传参数与工具版本参数未解耦");
       console.log("[test:package] ship: 自动发现、完整清单、规范哈希、真实命令路由通过");
     }
@@ -258,7 +257,6 @@ function smoke(filename) {
     } else {
       assert(figmaRow?.status === "platform-mismatch", "agent index figma 应报告平台不匹配");
     }
-    assert(cliRun(prefix,["agent","docs","figma","--json"],runOpts).status !== 0,"未声明运行技能的 figma 应明确拒绝");
     if (IS_WIN) {
       assert(cliExpectOk(prefix, ["figma", "--version"], runOpts).trim() === FIGMA_VERSION, "figma 路由版本不符");
       const figmaHelp = cliExpectOk(prefix, ["figma", "--help"], runOpts);
@@ -318,7 +316,7 @@ function smoke(filename) {
       );
     }
 
-    // 8) agent docs：真实安装包内 AGENTS.md 逐字节输出 + JSON 哈希自洽 + 帮助发现
+    // 8) agent docs：真实安装包内 SKILL.md 逐字节输出 + JSON 哈希自洽 + 帮助发现
     const installedPkgRoot = IS_WIN
       ? path.join(prefix, "node_modules", "@kevlns", "v-cli")
       : path.join(prefix, "lib", "node_modules", "@kevlns", "v-cli");
@@ -376,17 +374,20 @@ function smoke(filename) {
     console.log("[test:package] 安装版 SDK 实际执行冻结风格导出、来源扫描、导入与幂等校验通过");
     const installedDocs = fs.readFileSync(path.join(installedPkgRoot, "skills/v-cli/SKILL.md"), "utf-8");
     const repoDocs = fs.readFileSync(path.join(ROOT, "skills/v-cli/SKILL.md"), "utf-8");
-    assert(installedDocs === repoDocs, "安装包内 AGENTS.md 与仓库 AGENTS.md 不一致");
+    assert(installedDocs === repoDocs, "安装包内 SKILL.md 与仓库 SKILL.md 不一致");
     const authorsNote = cliExpectOk(prefix, ["agent", "docs"], runOpts);
-    assert(authorsNote === installedDocs, "agent docs stdout 与安装包内 AGENTS.md 不一致（应逐字节相等）");
+    assert(authorsNote === installedDocs, "agent docs stdout 与安装包内 SKILL.md 不一致（应逐字节相等）");
     const docsJson = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "--json"], runOpts));
     assert(
       docsJson.package === "@kevlns/v-cli" && docsJson.version === VERSION,
       `agent docs --json 身份 = ${docsJson.package}@${docsJson.version}（期望 @kevlns/v-cli@${VERSION}）`,
     );
-    assert(docsJson.content === installedDocs, "agent docs --json content 与安装包内 AGENTS.md 不一致");
+    assert(docsJson.content === installedDocs, "agent docs --json content 与安装包内 SKILL.md 不一致");
     assert(docsJson.sha256 === sha256(installedDocs), "agent docs --json sha256 与 content 不一致");
     const declared=JSON.parse(cliExpectOk(prefix,["agent","skills","--json"],runOpts));
+    for (const tool of ["figma", "ship", "unity", "xlmerge"]) {
+      assert(declared.skills.some(skill => skill.tool === tool), tool + " 缺少运行技能");
+    }
     for(const skill of declared.skills){
       const docs=JSON.parse(cliExpectOk(prefix,["agent","docs",skill.tool,"--json"],runOpts));
       assert(docs.content.startsWith("---"),"运行技能必须使用frontmatter");

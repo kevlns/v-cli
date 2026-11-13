@@ -18,7 +18,7 @@
 
 ### 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.7.3
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.7.4
 - 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
   **命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
@@ -56,7 +56,7 @@
 
 ### @kevlns/figma-to-uprefab — 命令 `v-cli figma …`
 
-**版本**：0.1.4
+**版本**：0.1.5
 **描述**：将 Figma 标记画板导出为源数据和图片，通过 Unity 转换器生成 UGUI 预制体。
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
@@ -67,7 +67,7 @@
 
 ### @kevlns/ship-cli — 命令 `v-cli ship …`
 
-**版本**：0.1.2
+**版本**：0.1.3
 **描述**：校验已构建的游戏产物，执行 Steam 上传、微信小游戏预览和开发版上传。
 **平台**：win32, linux, darwin
 
@@ -78,7 +78,7 @@
 
 ### @kevlns/u-cli-mod — 命令 `v-cli unity …`
 
-**版本**：0.3.1
+**版本**：0.3.2
 **描述**：按 Unity Editor 精确版本定位工具链，校验和安装 com.unity.pipeline，并执行工程命令。
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
@@ -89,7 +89,7 @@
 
 ### @kevlns/xlmerge — 命令 `v-cli xlmerge …`
 
-**版本**：2.0.5
+**版本**：2.0.6
 **描述**：在浏览器中审阅 Git 冲突工作簿的三方差异，校验后写回并提交合并结果。
 **平台**：darwin, linux, win32
 
