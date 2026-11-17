@@ -84,7 +84,7 @@ type Definition = {
   text?: boolean;
   positional?: string[];
   global?: boolean;
-  channel?: "image" | "video";
+  channel?: "image" | "video" | "spine";
 };
 const objectFields = { id: identifier, revision, input: file };
 const definitions: Definition[] = [
@@ -307,6 +307,11 @@ const videoActions = [
 const videoReads = new Set(["describe", "snapshot", "settings.get", "settings.presets.h3", "runtime.status", "task.list", "task.read", "operation.validate", "script.read", "script.plan", "material.list", "image", "media.status", "execution.status"]);
 const videoNoInput = new Set(["describe", "snapshot", "settings.get", "settings.presets.h3", "runtime.status", "runtime.start", "runtime.stop", "task.list", "material.list", "media.status"]);
 const videoNetwork = new Set(["describe", "snapshot", "settings.get", "settings.save", "runtime.status", "runtime.start", "runtime.stop", "operation.create", "operation.update", "operation.derive", "operation.validate", "operation.run", "operation.resume", "operation.cancel", "script.plan", "script.apply", "film.refine"]);
+const spineDefinitions: Definition[] = ["describe","parts","build","capture"].map((action):Definition => ({
+  id:"spine-"+action, command:["spine",action], channel:"spine",
+  fields:action==="describe"?{}:{input:file}, required:action==="describe"?[]:["input"],
+  readonly:action==="describe", global:true,
+}));
 const videoDefinitions: Definition[] = videoActions.map((action): Definition => ({
   id: "video-" + action.replaceAll(".", "-"), channel: "video", command: ["video", ...action.split(".")],
   fields: action === "execution.status" ? { operation: {type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"} } : { input: file }, required: action === "execution.status" ? ["operation"] : videoNoInput.has(action) ? [] : ["input"],
@@ -319,7 +324,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
       discoverOfficialPlugin(
         OFFICIAL_PLUGINS.find((s) => s.command === "art")!,
       ));
-  const registrations: CapabilityRegistration[] = [...definitions, ...imageDefinitions, ...videoDefinitions].map((d) => ({
+  const registrations: CapabilityRegistration[] = [...definitions, ...imageDefinitions, ...videoDefinitions, ...spineDefinitions].map((d) => ({
     descriptor: {
       id: "art." + (d.channel === "image" ? "image-" : "") + d.id,
       commands: [d.command],
@@ -416,7 +421,7 @@ export function createArtProvider(deps: ArtProviderDeps): CapabilityProvider {
           const plan=JSON.parse(readFileSync(file,"utf8"));
           if(plan.project!==ctx.binding.projectId||plan.module!==businessCommand[0])return fail("art-plan-scope-mismatch","计划不属于当前 art 工程或执行类型");
         }
-        const argv = d.channel === "video" ? [
+        const argv = d.channel === "spine" ? [...d.command, "--workspace", ctx.projectAnchor.root] : d.channel === "video" ? [
           ...d.command, "--workspace", ctx.projectAnchor.storageRoot, "--project", String(ctx.binding.projectId),
         ] : [
           ...d.command,

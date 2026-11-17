@@ -11,7 +11,7 @@ function registryFor(executor:FakeExecutor){const registry=new CapabilityRegistr
 describe("art image/video channel contracts",()=>{
  it("retains original art identities and exposes independent image aliases and video capabilities",()=>{
   const registry=registryFor(new FakeExecutor(()=>({stdout:"{}"})));
-  for(const id of ["art.style-read","art.generate-start","art.run-status","art.image-style-read","art.image-generate-start","art.image-run-status","art.video-describe","art.video-settings-save","art.video-operation-run","art.video-film-compose","art.video-execution-status"])expect(registry.describe(id),id).toBeDefined();
+  for(const id of ["art.style-read","art.generate-start","art.run-status","art.image-style-read","art.image-generate-start","art.image-run-status","art.spine-describe","art.spine-parts","art.spine-build","art.spine-capture","art.video-describe","art.video-settings-save","art.video-operation-run","art.video-film-compose","art.video-execution-status"])expect(registry.describe(id),id).toBeDefined();
   expect(registry.describe("art.image-style-read")!.commands).toEqual([["image","style","read"]]);
   expect(registry.describe("art.video-operation-run")!.commands).toEqual([["video","operation","run"]]);
   expect(registry.describe("art.video-task-list")!.sideEffects.some(effect=>effect.kind==="fs-write")).toBe(false);
