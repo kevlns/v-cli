@@ -49,6 +49,8 @@ v-cli capability run unity.test-start --project . --set mode=EditMode --json
 
 project init 写入工程 `.vant/config/v-cli.json`，只保存 schemaVersion 和 provider bindings。已有配置只补缺失且有默认值的段，不覆盖已有值；显式 --binding 指向已有段时拒绝并提示 --reset。--reset 先备份再替换；--dry-run 不写配置或备份。art 图片通道需要显式 workspace/output/cache/projectId 绑定，不能猜当前图片工程 ID；视频通道以当前工程根目录保存独立配置与任务。
 
+初始化也会按已安装工具的清单把完整技能（含 references、scripts）同步到 `$VANT_HOME/skills/managed`，默认位于 `~/.vant` 下。重复初始化复用内容一致的版本，`--dry-run` 只列出结果。用 `v-cli agent skills --json` 查看声明，用 `v-cli agent docs vant-spine-production` 读取美术工坊提供的 Spine 制作指南。
+
 Vant 的角色、workflow 和项目组织属于 `.vant/config/project.json`，v-cli 不读取或写入。绑定路径限定工程内，拒绝穿越和链接越界；具体字段见 capability describe 的 provider.binding。
 
 run 接受 --input JSON、--input-file FILE 和 --set k=v，按文件 → 内联 JSON → set 顺序合并，后者覆盖同名值。输入文件适合较大句柄或复杂结构，其路径以调用进程当前目录解析。目标由 --project 和绑定决定，不接受输入覆盖 projectPath。
@@ -102,7 +104,7 @@ v-cli capability describe art.run-resume --json
 | unity | 精确 Editor 版本路由、CLI 校验、适配包安装和 Pipeline 调用；连接目标工程的运行中 Editor |
 | figma | Figma 导出和 staging Prefab 工具；结构化 provider 仅离线 doctor/contract，不含联网导出或转换 |
 | ship | 已构建游戏的 Steam/微信校验和开发渠道交付；不自动向玩家发布 |
-| xlmerge | .xlsx/.xlsm Git 冲突可视化解决；先 detect，有人工项时 launch 并交用户决策 |
+| xlmerge | .xlsx/.xlsm Git 冲突三方裁决与写回；Agent 可用 prepare/apply，人工审阅可用 launch |
 
 每个插件首调先读 agent docs，再 describe。不要将插件执行成功当作引擎运行、平台发布或美术产物已完成。
 

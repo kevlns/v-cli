@@ -1,3 +1,4 @@
+import { syncManagedSkills } from "../core/managed-skills";
 import type { Command } from "commander";
 import type { CliCommand } from "../core/command";
 import type { CliContext } from "../core/context";
@@ -133,7 +134,7 @@ export const project: CliCommand = {
       .option("--dry-run", "只报告将要做的变更（action/added），不写任何文件")
       .option("--json", "输出机器可读 JSON")
       .addHelpText("after", PROJECT_HELP_TEXT)
-      .action((opts: { project?: string; binding: string[]; reset?: boolean; dryRun?: boolean; json?: boolean }) => {
+      .action(async (opts: { project?: string; binding: string[]; reset?: boolean; dryRun?: boolean; json?: boolean }) => {
         const json = ctx.json || opts.json;
         const registry = createDefaultRegistry();
         try {
@@ -143,8 +144,19 @@ export const project: CliCommand = {
             reset: opts.reset,
             dryRun: opts.dryRun,
           });
+          let skills: Awaited<ReturnType<typeof syncManagedSkills>> | undefined;
+          if (result.ok) {
+            try { skills = await syncManagedSkills({ dryRun: opts.dryRun }); }
+            catch (error) {
+              const reason = "受管技能同步失败：" + formatError(error);
+              if (json) ctx.log.result({ ok:false, projectConfig:result, skills:{ok:false,reason} });
+              ctx.log.error(reason + "。修正后可重新运行 project init。");
+              process.exitCode = 1;
+              return;
+            }
+          }
           if (json) {
-            ctx.log.result(result);
+            ctx.log.result(skills ? { ...result, skills } : result);
             if (!result.ok) {
               ctx.log.error(result.reason);
               process.exitCode = 1;
@@ -173,6 +185,7 @@ export const project: CliCommand = {
               ? `检测到 Vant 配置 ${VANT_PROJECT_CONFIG_RELATIVE}（只读提示，v-cli 未做任何修改）`
               : "未检测到 Vant 配置（.vant/config/project.json）；角色/workflow 归属 Vant，不在本文件",
           ];
+          if (skills) lines.push(`受管技能: ${skills.names.join("、")}（${skills.dryRun ? "预览" : "已就绪"}）`);
           for (const warning of result.warnings) lines.push(`警告: ${warning}`);
           ctx.log.result(lines.join("\n"));
         } catch (err) {

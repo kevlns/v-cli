@@ -176,7 +176,7 @@ export const agent: CliCommand = {
         path: ["docs"],
         usage: "v-cli agent docs [command] [--json]",
         description: "读取工具声明的运行技能入口",
-        arguments: [{ name: "command", required: false, description: "官方插件命令名（如 unity、xlmerge）" }],
+        arguments: [{ name: "command", required: false, description: "插件命令名或技能 ID" }],
         options: [{ flags: "--json", description: "输出 { package, version, sha256, content }" }],
         output: {
           format: "stdout",
@@ -259,7 +259,7 @@ export const agent: CliCommand = {
     program
       .command("docs")
       .description("读取工具声明的运行技能入口")
-      .argument("[command]", "官方插件命令名（如 unity、xlmerge）")
+      .argument("[command]", "插件命令名或技能 ID")
       .option("--json", "输出机器可读 JSON（含 sha256/content）")
       .addHelpText("after", DOCS_HELP_TEXT)
       .action((command: string | undefined, opts: { json?: boolean }) => {
@@ -299,7 +299,7 @@ export const agent: CliCommand = {
     program.command("skills").description("列出受管工具声明的技能")
       .option("--json", "JSON 输出").action(()=>ctx.log.result(discoverToolSkills()));
     program.command("export").description("显式导出外部宿主技能")
-      .argument("[command]").requiredOption("--host <name>").requiredOption("--directory <path>")
+      .argument("[command]", "插件命令名或技能 ID").requiredOption("--host <name>").requiredOption("--directory <path>")
       .option("--dry-run").option("--json")
       .action((command: string | undefined, opts: {host:string;directory:string;dryRun?:boolean}) =>
         ctx.log.result(exportToolSkill(command, opts)));

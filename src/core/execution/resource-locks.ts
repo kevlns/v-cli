@@ -1,3 +1,4 @@
+import { retryFile } from "../retry-file";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -48,23 +49,6 @@ export type ResourceLease = (() => Promise<void>) & {
   transfer(pid: number): Promise<boolean>;
 };
 const pause = () => new Promise((resolve) => setTimeout(resolve, 10));
-async function retryFile<T>(action: () => T): Promise<T> {
-  const deadline = Date.now() + 3000;
-  for (;;) {
-    try {
-      return action();
-    } catch (error) {
-      if (
-        !["EPERM", "EBUSY", "EACCES"].includes(
-          (error as NodeJS.ErrnoException).code ?? "",
-        ) ||
-        Date.now() >= deadline
-      )
-        throw error;
-      await pause();
-    }
-  }
-}
 async function remove(file: string) {
   try {
     await retryFile(() => fs.unlinkSync(file));

@@ -18,7 +18,7 @@
 
 ### 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.7.4
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.7.5
 - 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
   **命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
@@ -45,7 +45,7 @@
 
 ### @kevlns/art-workshop — 命令 `v-cli art …`
 
-**版本**：0.6.3
+**版本**：0.6.4
 **描述**：管理图片与视频两个独立制作通道；图片旧命令兼容，视频复用项目状态、CAS及原执行身份。
 **平台**：win32, linux, darwin
 
@@ -89,11 +89,11 @@
 
 ### @kevlns/xlmerge — 命令 `v-cli xlmerge …`
 
-**版本**：2.0.6
-**描述**：在浏览器中审阅 Git 冲突工作簿的三方差异，校验后写回并提交合并结果。
+**版本**：2.0.7
+**描述**：处理 Git 中的 Excel 三方冲突，支持 Agent 根据项目规则裁决并写回，也支持浏览器逐项审阅。
 **平台**：darwin, linux, win32
 
-**何时使用**：When a user asks to resolve Git merge conflicts in .xlsx/.xlsm planning or configuration tables (策划表/配置表冲突): run detect first; when reviewCount > 0 run launch and give the returned url to the user. Configured auto-theirs filters may resolve and commit matched generated workbooks without opening the UI. Do not inspect workbook cells or summarize diffs yourself; the resolver owns diff, choices, write-back and commit.
+**何时使用**：在发生合并的工区 detect → prepare，读取 manifest 中 base/ours/theirs 的差异与稳定 ID，按项目约束及变更意图裁决。仅将无法判断的业务项交控制源。用 apply --no-commit 写回并验证 Git 索引，按原任务完成提交或交付。用户选择可视化审阅时使用 launch。
 
 **首次调用前必读**：`v-cli agent docs xlmerge`（插件包内 清单声明的 SKILL.md）
 **实时参数/命令**：`v-cli agent describe xlmerge --json`

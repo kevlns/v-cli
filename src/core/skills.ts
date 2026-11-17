@@ -37,12 +37,13 @@ export function discoverToolSkills(options: {resolvePackage?: (name: string) => 
 
 export function readRuntimeSkill(command?: string, options: {resolvePackage?: (name:string)=>string|undefined} = {}) {
   const tool = command ?? "v-cli";
-  const result=discoverToolSkills(options), skill=result.skills.find(s=>s.tool===tool);
+  const result=discoverToolSkills(options);
+  const skill=result.skills.find(s=>s.id===tool) ?? result.skills.find(s=>s.tool===tool);
   if (!skill) throw new Error("工具未声明运行技能："+tool);
   return {...skill,file:skill.path,content:fs.readFileSync(skill.path,"utf8"),sha256:createHash("sha256").update(fs.readFileSync(skill.path)).digest("hex")};
 }
 
-function skillBundleHash(root:string) {
+export function skillFileHashes(root:string) {
  const files:{path:string;hash:string}[]=[];
  const walk=(directory:string,prefix="")=>{
   for(const entry of fs.readdirSync(directory,{withFileTypes:true})){
@@ -54,7 +55,10 @@ function skillBundleHash(root:string) {
   }
  };
  walk(root);files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
- return createHash("sha256").update(JSON.stringify(files)).digest("hex");
+ return files;
+}
+function skillBundleHash(root:string) {
+ return createHash("sha256").update(JSON.stringify(skillFileHashes(root))).digest("hex");
 }
 
 /** 外部宿主导出必须显式选择宿主和目录；不探测用户目录。 */
@@ -88,7 +92,7 @@ export function exportToolSkill(command: string | undefined, options: {
   };
   walk(path.dirname(skill.path),target);
   const adapter=path.join(root,"adapters",options.host);
-  if (fs.existsSync(adapter)) walk(adapter,target);
+  if (fs.existsSync(adapter) && readRuntimeSkill(skill.tool,options).id===skill.id) walk(adapter,target);
   if (!options.dryRun) for (const file of planned) {
     fs.mkdirSync(path.dirname(file.path),{recursive:true}); fs.writeFileSync(file.path,file.bytes);
   }

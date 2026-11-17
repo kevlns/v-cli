@@ -5,7 +5,7 @@
  * 流程：npm pack 生成 tgz → 在隔离临时 prefix 中做一次真实 `npm install --global`，
  * 官方依赖 xlmerge / u-cli-mod / figma-to-uprefab / ship-cli / art-workshop 由 registry
  * 正常解析安装 → 通过 npm 生成的 bin wrapper（非直接运行 dist/cli.mjs）执行 CLI，断言：
- *   - `--version` 为 0.7.4；
+ *   - `--version` 为 0.7.5；
  *   - `plugin list --json` 报告 xlmerge available；unity 在 win32 为 available、
  *     非 win32 为 platform-mismatch；figma 同样遵循 Windows 平台门禁；
  *   - `agent index --json` / `agent describe --json` 暴露官方清单全量元数据
@@ -30,8 +30,8 @@ import { createHash } from "node:crypto";
 
 const ROOT = process.cwd();
 const IS_WIN = process.platform === "win32";
-const VERSION = "0.7.4";
-const XL_VERSION = "2.0.6";
+const VERSION = "0.7.5";
+const XL_VERSION = "2.0.7";
 const UNITY_VERSION = "0.3.2";
 const FIGMA_VERSION = "0.1.5";
 const STREAM_CAP = 4000;
@@ -167,7 +167,7 @@ function smoke(filename) {
 
   const artConfig = path.join(tmp, "art-config.json");
   fs.writeFileSync(artConfig, JSON.stringify({ paths: { workspace: work, output: path.join(tmp, "output"), refs: path.join(tmp, "refs"), cache: path.join(tmp, "cache") }, autoSyncSkills: false }));
-  const env = { ...process.env, V_CLI_HOME: home, ART_WORKSHOP_CONFIG: artConfig };
+  const env = { ...process.env, V_CLI_HOME: home, VANT_HOME: path.join(tmp, 'vant'), ART_WORKSHOP_CONFIG: artConfig };
   delete env.V_CLI_PLUGIN_RESOLVE_FROM; // 纯净安装：不继承任何插件解析钩子
   delete env.npm_config_prefix;
 
@@ -188,7 +188,7 @@ function smoke(filename) {
     const runOpts = { cwd: work, env };
     {
       const artRows = JSON.parse(cliExpectOk(prefix, ["plugin", "list", "--json"], runOpts));
-      assert(artRows.some(row => row.name === "art" && row.status === "available" && row.version === "0.6.3"), "美术工坊没有被自动发现");
+      assert(artRows.some(row => row.name === "art" && row.status === "available" && row.version === "0.6.4"), "美术工坊没有被自动发现");
       const artDesc = JSON.parse(cliExpectOk(prefix, ["agent", "describe", "art", "--json"], runOpts));
       const artManifest = JSON.parse(fs.readFileSync(path.join(path.dirname(installedDepPath(prefix, "@kevlns/art-workshop")), "v-cli.plugin.json"), "utf8"));
       assert(artDesc.commands?.length === artManifest.agent.commands.length, "美术工坊命令发现不完整");
@@ -198,7 +198,7 @@ function smoke(filename) {
       assert(artManifest.agent.commands.some(command => command.capabilityId === "art.style-sample-job" && command.options?.some(option => /^--input(?:\s|$)/.test(option.flags))), "安装包缺少可编辑样张方案");
       const artDocs = JSON.parse(cliExpectOk(prefix, ["agent", "docs", "art", "--json"], runOpts));
       assert(artDocs.package === "@kevlns/art-workshop" && artDocs.sha256 === sha256(artDocs.content), "美术工坊随包规范读取失败");
-      assert(cliExpectOk(prefix, ["art", "--version"], runOpts).trim() === "0.6.3", "美术工坊版本路由失败");
+      assert(cliExpectOk(prefix, ["art", "--version"], runOpts).trim() === "0.6.4", "美术工坊版本路由失败");
       assert(cliExpectOk(prefix, ["art", "--help"], runOpts).includes("generate"), "美术工坊帮助路由失败");
       const settings = JSON.parse(cliExpectOk(prefix, ["art", "config", "show"], runOpts));
       assert(settings.file === artConfig && settings.paths.workspace === work, "美术工坊未使用同一份外部本地配置");
@@ -388,9 +388,15 @@ function smoke(filename) {
     for (const tool of ["figma", "ship", "unity", "xlmerge"]) {
       assert(declared.skills.some(skill => skill.tool === tool), tool + " 缺少运行技能");
     }
+    const init = JSON.parse(cliExpectOk(prefix, ["project", "init", "--project", work, "--json"], runOpts));
+    assert(init.ok && init.skills.names.includes("vant-spine-production"), "project init 未同步 Spine 制作指南");
+    const index = JSON.parse(fs.readFileSync(path.join(env.VANT_HOME, "state/tool-skills/index.json"), "utf8"));
+    const artBundle = index.tools.find(tool => tool.id === "art");
+    const spine = artBundle?.skills.find(skill => skill.id === "vant-spine-production");
+    assert(spine && fs.existsSync(path.join(env.VANT_HOME, "skills", artBundle.path, spine.path)), "受管 Spine 技能未落盘");
     for(const skill of declared.skills){
-      const docs=JSON.parse(cliExpectOk(prefix,["agent","docs",skill.tool,"--json"],runOpts));
-      assert(docs.content.startsWith("---"),"运行技能必须使用frontmatter");
+      const docs=JSON.parse(cliExpectOk(prefix,["agent","docs",skill.id,"--json"],runOpts));
+      assert(docs.content === fs.readFileSync(skill.path, "utf8") && docs.content.startsWith("---"),"运行技能必须使用frontmatter");
       assert(docs.sha256===sha256(docs.content),"技能文档哈希不一致");
     }
     const topHelp = cliExpectOk(prefix, ["--help"], runOpts);

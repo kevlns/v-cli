@@ -36,3 +36,28 @@ test("external export requires explicit host/target, preserves extensions and ne
  expect(fs.readFileSync(path.join(dry.target,"scripts/getty.py"),"utf8")).toContain("getty");
  expect(fs.existsSync(path.join(f.root,".codex"))).toBe(false);
 });
+test("all declared skills are projected on init, including references, without overwriting local skills", async () => {
+ const {syncManagedSkills} = await import("../src/core/managed-skills");
+ const f=fixture(), home=path.join(f.root,"vant-home");
+ const extra=path.join(f.pkg,"skills/example-spine");
+ fs.mkdirSync(path.join(extra,"references"),{recursive:true});
+ fs.writeFileSync(path.join(extra,"SKILL.md"),"spine method");
+ fs.writeFileSync(path.join(extra,"references/names.md"),"clip_001");
+ f.manifest.skills.push({id:"example-spine",path:"skills/example-spine/SKILL.md"});
+ fs.writeFileSync(path.join(f.pkg,"v-cli.plugin.json"),JSON.stringify(f.manifest));
+ expect(readRuntimeSkill("example-spine",f).content).toBe("spine method");
+ expect((await syncManagedSkills({...f,home,dryRun:true})).names).toEqual(["art-workshop","example-spine"]);
+ expect(fs.existsSync(home)).toBe(false);
+ fs.mkdirSync(path.join(home,"skills/local"),{recursive:true});fs.writeFileSync(path.join(home,"skills/local/keep"),"mine");
+ const index=path.join(home,"state/tool-skills/index.json");
+ await syncManagedSkills({...f,home});
+ const initial=fs.readFileSync(index,"utf8"), stamp=fs.statSync(index).mtimeMs;
+ const bundle=JSON.parse(initial).tools[0].path;
+ expect(fs.readFileSync(path.join(home,"skills",bundle,"example-spine/references/names.md"),"utf8")).toBe("clip_001");
+ await syncManagedSkills({...f,home});
+ expect(fs.statSync(index).mtimeMs).toBe(stamp);
+ fs.writeFileSync(path.join(extra,"references/names.md"),"clip_002");
+ await syncManagedSkills({...f,home});
+ expect(JSON.parse(fs.readFileSync(index,"utf8")).tools[0].path).not.toBe(bundle);
+ expect(fs.readFileSync(path.join(home,"skills/local/keep"),"utf8")).toBe("mine");
+});
