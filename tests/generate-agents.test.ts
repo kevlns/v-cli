@@ -100,14 +100,14 @@ describe("generate-agents.mjs", () => {
     expect(content).toContain("何时使用 alpha");
     expect(content).toContain("v-cli agent docs alpha");
     expect(content).toContain("v-cli agent describe alpha --json");
-    expect(content).toContain("首次调用任何 official 插件命令前");
+    expect(content).toContain("按任务选择下方路由和参数");
     expect(content).toContain("v-cli project init|inspect");
     expect(content).toContain("v-cli capability list|describe|coverage|run");
     expect(content).toContain("验收状态分离");
-    expect(content).toContain("v-cli agent index --json");
+    expect(content).toContain("v-cli agent describe");
   });
 
-  it("瘦索引只保留规范/实时元数据入口，不内联子命令与安全标签", () => {
+  it("操作索引包含路由后的子命令和按需查阅入口", () => {
     const dir = tmpDir();
     const m1 = writeManifest(dir, "m1", "@kevlns/aaa", "alpha");
     const m2 = writeManifest(dir, "m2", "@kevlns/bbb", "unity", {
@@ -124,7 +124,7 @@ describe("generate-agents.mjs", () => {
     expect(content).toContain("v-cli agent describe unity --json");
     expect(content).not.toContain("用法：");
     expect(content).not.toContain("安全标签：read-only");
-    expect(content).not.toContain("alpha run");
+    expect(content).toContain("v-cli alpha run");
     expect(content).not.toContain("u-cli-mod doctor");
   });
 
@@ -188,7 +188,7 @@ describe("generate-agents.mjs", () => {
     expect(content).toContain("v-cli agent docs xlmerge");
     expect(content).toContain("v-cli agent docs unity");
     expect(content).toContain("v-cli agent describe xlmerge --json");
-    expect(content).not.toContain("xlmerge --repo <r> detect");
+    expect(content).toContain("v-cli xlmerge --repo <r> detect");
     expect(content).not.toContain("u-cli-mod doctor");
     expect(content).not.toContain("安全标签：read-only");
     // 复位后第二次运行字节一致（确定性）

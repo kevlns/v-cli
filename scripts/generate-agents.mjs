@@ -169,7 +169,6 @@ function renderCore(plugins, version) {
   lines.push("");
   lines.push(`- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@${version}`);
   lines.push("- 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；");
-  lines.push("  **命令集合以实际发现为准**：先运行 `v-cli agent index --json` 获取全部命令与 agent 元数据");
   lines.push("- 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看");
   lines.push("- AI Agent 引导文档：`v-cli agent docs` 输出运行技能入口（`--json` 含 sha256/content）；");
   lines.push("- 工程执行基座（内置命令）：`v-cli project init|inspect` 管理工程根绑定 `.vant/config/v-cli.json`");
@@ -180,14 +179,12 @@ function renderCore(plugins, version) {
   lines.push("  **执行状态与验收状态分离**——工具进程退出码 0 不等于业务通过，capability 退出码 0 只在验收 passed 时出现（1=执行/验收失败，2=未执行，3=已执行但验收 not-run 需按 followUp 轮询，4=已确认取消，5=结果未知）；");
   lines.push("  每次执行在 `<工程根>/.vant/state/operations/<operationId>/` 保存输入摘要、事件与结果证据（本地记录，不是任务队列；`--no-persist` 可关闭）；");
   lines.push("  **lifecycle 是任务级六态**（accepted/running/completed/failed/cancelled/unknown；unknown=不可解释/不可知，绝不升级）；异步触发在结果 `handle` 中返回可序列化执行句柄——查询/取消类能力以 `input.handle` 传入并用内核校验（落盘证据回读，失败明确拒绝不回退最近任务）；Unity 后端提供 runId：`unity.compile`/`unity.test-start` 句柄的 backendTaskId=runId，用 `unity.compile-query`/`unity.test-query`/`unity.test-cancel-run` 按句柄关联查询/定向取消（关联失效=后端 unknown_run，明确 failed 不采信其他任务记录）");
-  lines.push("- 默认结构化 provider 为 unity、figma、art、ship、xlmerge；先 `v-cli capability describe <id> --json` 读契约，受控 argv 调用不拼 shell；");
+  lines.push("- 默认结构化 provider 为 unity、figma、art、ship、xlmerge；按需用 `v-cli capability describe <id> --json` 读契约，受控 argv 调用不拼 shell；");
   lines.push("  figma provider（`@kevlns/figma-to-uprefab`，离线）：`figma.contract` 校验 staging 契约（roots>0 才通过）、`figma.doctor` 只读诊断——v-cli 注入无令牌托管配置，无网络、不碰凭据；");
   lines.push("  exec 类能力默认自动跑一次 doctor 核对就绪判据（不得跳过）；`unity.compile`/`unity.test-start` 是异步触发，只报告 accepted，按原 handle 轮询 `unity.compile-query`/`unity.test-query`；无参 status 只观察当前/最近槽位；测试 completed、有效非零报告且全部用例通过才 passed");
-  lines.push("- **首调规范**：首次调用任何 official 插件命令前，必须先运行 `v-cli agent docs <命令名>`，");
-  lines.push("  掌握该插件的声明技能；使用规范、快速流程与禁止事项以插件技能为准。");
   lines.push("- 官方插件命令（`v-cli xlmerge …`、`v-cli unity …`、`v-cli figma …`、`v-cli ship …`、`v-cli art …`）在子进程中运行（stdio 继承）：v-cli 只做路由，不解析或改写插件输出。");
-  lines.push("- `art` 是随包美术工坊插件；先读 `v-cli agent docs art`，用 `v-cli art config show`、`v-cli art agent index` 和 `v-cli art config validate` 确认工程、核心及远程/本地后端。本地执行前用 `workflow list` 和 `doctor` 检查工作流与环境；任务控制用 `task list/status/wait/cancel/recover/resume`；resume 只查询原上游与下载。`shutdown` 停止当前工作区关联任务，核验共享队列和进程身份后关闭服务。真实分析和生成按任务授权执行。");
-  lines.push("- `ship` 是随包官方插件（@kevlns/ship-cli），随 v-cli 安装并自动发现；先运行 `v-cli agent docs ship`、`v-cli ship doctor --json`，再按 Steam / 微信小游戏流程执行。缺失时明确报告 missing，不在运行时自动安装。");
+  lines.push("- `art` 是随包美术工坊插件；用 `v-cli art config show`、`v-cli art agent index` 和 `v-cli art config validate` 确认工程、核心及远程/本地后端。本地执行前用 `workflow list` 和 `doctor` 检查工作流与环境；任务控制用 `task list/status/wait/cancel/recover/resume`；resume 只查询原上游与下载。`shutdown` 停止当前工作区关联任务，核验共享队列和进程身份后关闭服务。真实分析和生成按任务授权执行。");
+  lines.push("- `ship` 是随包官方插件（@kevlns/ship-cli），随 v-cli 安装并自动发现；Steam 和微信小游戏分别通过 steam 与 wx 路由发布。缺失时明确报告 missing，不在运行时自动安装。");
   lines.push("- 插件 `--help`/`--json` 等参数由插件自己消费；art 的模型登记、参数策略和执行回执归工具维护，v-cli 不复制目录。");
   lines.push("- 插件对 worktree 的写入/提交行为以插件清单 v-cli.plugin.json 的 `agent.safety` 为准：");
   lines.push("  v-cli 不替插件做 diff/write-back/commit；**未经显式 flag 不得 push**");
@@ -232,9 +229,13 @@ function renderPlugin(plugin) {
     lines.push(`**何时使用**：${plugin.whenToUse}`);
   }
   lines.push("");
-  lines.push(`**首次调用前必读**：\`v-cli agent docs ${plugin.command}\`（插件包内 清单声明的 SKILL.md）`);
+  lines.push(`**操作指南**：\`v-cli agent docs ${plugin.command}\`（插件包内 清单声明的 SKILL.md）`);
   lines.push(`**实时参数/命令**：\`v-cli agent describe ${plugin.command} --json\``);
   lines.push("");
+  for (const command of plugin.commands) {
+    const usage = String(command.usage || [plugin.bin, ...command.path].join(" ")).replace(/^\S+/, "v-cli " + plugin.command);
+    lines.push("- `" + usage + "` " + command.description);
+  }
   return lines;
 }
 
@@ -256,7 +257,7 @@ function render(plugins, version) {
   lines.push("");
   lines.push("所有清单字段的解释见 `schemas/v-cli-plugin.schema.json` 与 `v-cli agent describe` 输出。");
   const body = lines.join("\n").replace(/^# AGENTS\.md\n/, "").replace(/^## /gm, "### ");
-  return `# Vant 工具命令入口 Agent 规范\n\n## 定位\n\n发现工具、绑定工程、执行结构化能力并保存操作证据。\n\n## 调用流程\n\n先 doctor 和 agent index，再读取目标工具的 agent docs 与 describe。\n\n## 调用规范\n\n${body}\n\n## 结果验证\n\n执行状态、任务生命周期和业务验收分别判断；未知结果不能视为成功。\n\n## 参考资料\n\n工具包 README.md 与 docs/documentation.md；命令参数以实时 --help 为准。\n\n## 许可与版权\n\nMIT。Copyright © 2026 Vant。\n`;
+  return `# Vant 工具命令入口 Agent 规范\n\n## 定位\n\n发现工具、绑定工程、执行结构化能力并保存操作证据。\n\n## 调用流程\n\n按任务选择下方路由和参数。陌生操作可定向读取单项契约；需要诊断环境时用 doctor。\n\n## 调用规范\n\n${body}\n\n## 结果验证\n\n执行状态、任务生命周期和业务验收分别判断；未知结果不能视为成功。\n\n## 参考资料\n\n工具包 README.md 与 docs/documentation.md；命令参数以实时 --help 为准。\n\n## 许可与版权\n\nMIT。Copyright © 2026 Vant。\n`;
 
 }
 
