@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { syncManagedSkills } from "../core/managed-skills";
 import type { Command } from "commander";
 import type { CliCommand } from "../core/command";

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright © 2026 Vant <sl_kevln@163.com>
 // 测试 fixture：回显 argv 与 v-cli 注入环境（供 runner / 集成测试断言）。
 // - 载荷写入 V_CLI_TEST_OUTPUT_FILE（JSON：{ argv, env }）
 // - env 只摘取 v-cli 注入的三个键（runner 测试断言精确相等）

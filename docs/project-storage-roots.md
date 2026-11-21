@@ -1,3 +1,5 @@
+<!-- Copyright © 2026 Vant <sl_kevln@163.com> -->
+
 # SDK 项目代码根与数据根
 
 `PROJECT_STORAGE_ROOT_VERSION === 1` 表示 SDK 支持独立代码根和数据根。

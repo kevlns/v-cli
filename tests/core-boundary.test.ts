@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 架构方向约束（静态扫描）：src/core/** 不得 import src/providers/**。
  * default-registry 是显式装配点，位于 src/ 根（不在 core 内）。

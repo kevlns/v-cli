@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { describe, expect, it } from "vitest";
 import { CapabilityRegistrationError } from "../src/core/execution/errors";
 import { validateSchemaDefinition, validateValue } from "../src/core/execution/json-schema";

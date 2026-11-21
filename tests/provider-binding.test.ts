@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 阶段 B 验收：通用 Provider 绑定契约。
  *

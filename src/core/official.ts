@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 官方插件发现：严格白名单（OFFICIAL_PLUGINS），只解析白名单内的包，
  * 不做 node_modules 扫描、不做运行时安装。发现过程为纯函数（IO 可注入），

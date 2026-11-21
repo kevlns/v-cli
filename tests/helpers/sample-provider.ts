@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 第三方样本 Provider：验证"仅实现 Provider 模块即可接入，不修改核心源文件"。
  *

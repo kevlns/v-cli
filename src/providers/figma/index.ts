@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { figmaCommandRegistrations } from "./commands";
 /**
  * Figma 结构化适配：doctor/contract 使用无凭据的托管配置进行离线核对；

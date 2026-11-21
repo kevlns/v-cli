@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { capabilityCoverage } from "../capability-coverage";
 import fs from "node:fs";
 import path from "node:path";

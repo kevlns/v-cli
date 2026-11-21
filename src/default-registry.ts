@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { createShipProvider } from "./providers/ship";
 import { createXlmergeProvider } from "./providers/xlmerge";
 import type { CommandProviderDeps } from "./providers/command-provider";

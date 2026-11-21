@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * figma-to-uprefab CLI 输出解释层（保守、只认证据）。
  *

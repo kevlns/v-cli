@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { discoverToolSkills, readRuntimeSkill, exportToolSkill } from "../core/skills";
 import type { Command } from "commander";
 import type { CliCommand } from "../core/command";

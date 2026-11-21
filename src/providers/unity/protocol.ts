@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * Unity Pipeline 协议解释层（保守、只认证据）。
  *

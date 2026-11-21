@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { describe, expect, it } from "vitest";
 import { buildAgentIndex, type AgentIndexRow } from "../src/commands/agent";
 import type { CliCommand } from "../src/core/command";

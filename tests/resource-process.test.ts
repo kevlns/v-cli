@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { it, expect } from "vitest";
 import { spawn } from "node:child_process";
 import { once } from "node:events";

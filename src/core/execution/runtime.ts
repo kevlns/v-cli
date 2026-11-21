@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 执行内核（与 commander CLI 分离，可被 SDK/MCP/Agent 直接调用）。
  *

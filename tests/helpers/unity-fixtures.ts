@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * Unity 真实协议 fixture（按 u-cli-mod 包内 AGENTS.md / v-cli.plugin.json /
  * 该仓库自带 Windows E2E harness 的读取方式构造），不含任何真实工程数据。

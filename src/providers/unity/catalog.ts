@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 // 来自固定版本 u-cli-mod 清单；覆盖检查校验与安装包一致。
 export const PIPELINE_COMMANDS = {
   "add_component": "添加组件。",

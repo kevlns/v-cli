@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { Command, CommanderError } from "commander";
 import { createContext, defaultHomeDir } from "./core/context";
 import { loadAllCommands } from "./core/loader";

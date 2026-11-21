@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * @kevlns/v-cli SDK：结构化 capability 注册/执行内核的公开出口。
  *

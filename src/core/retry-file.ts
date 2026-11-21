@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 export async function retryFile<T>(action: () => T): Promise<T> {
   const deadline = Date.now() + 3000;
   for (;;) {

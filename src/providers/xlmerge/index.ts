@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import { verifyExecutionHandle } from "../../core/execution/handle";
 import fs from "node:fs";
 import path from "node:path";

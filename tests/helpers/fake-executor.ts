@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /** 测试用假进程执行器：脚本化响应 + 调用记录（不启动真实进程） */
 
 import type { ProcessExecutor, ProcessInvocation, ProcessOutcome } from "../../src/core/execution/executor";

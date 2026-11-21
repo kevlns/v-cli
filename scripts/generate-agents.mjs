@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * AGENTS.md 生成器（无第三方依赖，输出确定）。
  *
@@ -257,7 +258,7 @@ function render(plugins, version) {
   lines.push("");
   lines.push("所有清单字段的解释见 `schemas/v-cli-plugin.schema.json` 与 `v-cli agent describe` 输出。");
   const body = lines.join("\n").replace(/^# AGENTS\.md\n/, "").replace(/^## /gm, "### ");
-  return `# Vant 工具命令入口 Agent 规范\n\n## 定位\n\n发现工具、绑定工程、执行结构化能力并保存操作证据。\n\n## 调用流程\n\n按任务选择下方路由和参数。陌生操作可定向读取单项契约；需要诊断环境时用 doctor。\n\n## 调用规范\n\n${body}\n\n## 结果验证\n\n执行状态、任务生命周期和业务验收分别判断；未知结果不能视为成功。\n\n## 参考资料\n\n工具包 README.md 与 docs/documentation.md；命令参数以实时 --help 为准。\n\n## 许可与版权\n\nMIT。Copyright © 2026 Vant。\n`;
+  return `<!-- Copyright © 2026 Vant <sl_kevln@163.com> -->\n\n# Vant 工具命令入口 Agent 规范\n\n## 定位\n\n发现工具、绑定工程、执行结构化能力并保存操作证据。\n\n## 调用流程\n\n按任务选择下方路由和参数。陌生操作可定向读取单项契约；需要诊断环境时用 doctor。\n\n## 调用规范\n\n${body}\n\n## 结果验证\n\n执行状态、任务生命周期和业务验收分别判断；未知结果不能视为成功。\n\n## 参考资料\n\n工具包 README.md 与 docs/documentation.md；命令参数以实时 --help 为准。\n\n## 许可与版权\n\nMIT。Copyright © 2026 Vant <sl_kevln@163.com>。\n`;
 
 }
 

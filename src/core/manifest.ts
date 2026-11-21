@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * v-cli 插件清单（v-cli.plugin.json）校验器。
  *

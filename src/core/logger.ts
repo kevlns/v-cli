@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /** 双通道 logger：结果走 stdout（可管道），诊断/警告走 stderr */
 export class Logger {
   constructor(private jsonMode = false) {}

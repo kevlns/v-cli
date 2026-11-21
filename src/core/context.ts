@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import os from "node:os";
 import path from "node:path";
 import { ConfigStore } from "./config";

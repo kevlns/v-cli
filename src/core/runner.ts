@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 官方插件子进程运行器：永远不把插件代码 import 进 v-cli 进程，
  * 不解析/不包装插件 stdout——stdio 直接继承（inherit）。

@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 轻量 JSON Schema 子集：既校验"schema 定义本身"（注册期），
  * 也校验"真实值"（运行期输入/输出）。零依赖，错误信息带 JSON Pointer。

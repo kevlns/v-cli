@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import {afterEach, expect, test} from "vitest";
 import fs from "node:fs"; import path from "node:path"; import os from "node:os";
 import {discoverToolSkills,readRuntimeSkill,exportToolSkill} from "../src/core/skills";

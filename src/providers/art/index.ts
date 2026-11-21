@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import path from "node:path";
 import {readFileSync} from "node:fs";
 import {

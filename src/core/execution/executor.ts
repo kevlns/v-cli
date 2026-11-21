@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 受控进程执行器：显式 argv 数组、shell:false、输出捕获与截断、超时/取消即杀。
  *

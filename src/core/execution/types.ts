@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 结构化执行契约：Capability / Provider 描述、请求、结果与状态模型。
  *

@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import type { Command } from "commander";
 import type { CliContext } from "./context";
 import { OFFICIAL_COMMAND_NAMES } from "./official";

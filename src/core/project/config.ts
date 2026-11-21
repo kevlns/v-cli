@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * 工程级 v-cli 配置：.vant/config/v-cli.json —— 通用配置外壳。
  *

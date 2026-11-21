@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * Capability / Provider 注册表：注册即校验，list/describe 只读描述（绝不执行工具）。
  *

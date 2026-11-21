@@ -1,3 +1,4 @@
+// Copyright © 2026 Vant <sl_kevln@163.com>
 import type { CliCommand } from "../core/command";
 import { agent } from "./agent";
 import { capability } from "./capability";

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright © 2026 Vant <sl_kevln@163.com>
 /**
  * test:package — 发布后安装冒烟测试（真实 npm 全局安装）。
  *

@@ -2,6 +2,8 @@
 name: v-cli
 description: 发现项目工具及技能，读取能力契约并执行结构化操作。
 ---
+<!-- Copyright © 2026 Vant <sl_kevln@163.com> -->
+
 
 # Vant 工具入口
 
