@@ -20,7 +20,7 @@
 
 ### 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.7.10
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.7.11
 - 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
 - AI Agent 引导文档：`v-cli agent docs` 输出运行技能入口（`--json` 含 sha256/content）；
@@ -44,7 +44,7 @@
 
 ### @kevlns/art-workshop — 命令 `v-cli art …`
 
-**版本**：0.6.9
+**版本**：0.6.10
 **描述**：管理图片、视频与 Spine 骨骼动画制作。
 **平台**：win32, linux, darwin
 
