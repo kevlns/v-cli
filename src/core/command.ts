@@ -31,7 +31,7 @@ export interface CliCommand {
   name: string;
   description: string;
   hidden?: boolean;
-  /** 插件契约版本：v-cli 0.2 起必须为 1 */
+  /** 插件契约版本，固定为 1 */
   apiVersion: 1;
   /** 供 `v-cli agent index/describe` 索引的自定义元数据 */
   agent?: CliAgentMeta;
@@ -173,7 +173,7 @@ export function validateLocalCommand(
   if (cmd.apiVersion !== 1) {
     const got = cmd.apiVersion === undefined ? "缺失" : JSON.stringify(cmd.apiVersion);
     errors.push(
-      `apiVersion 必须为 1（当前: ${got}）。v-cli 0.2 起采用 apiVersion 1 插件契约，旧版插件请补上 apiVersion: 1 后重新加载`,
+      `apiVersion 必须为 1（当前: ${got}），请在插件导出中声明 apiVersion: 1`,
     );
   }
 

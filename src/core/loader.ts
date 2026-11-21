@@ -35,7 +35,7 @@ export async function loadLocalPlugins(ctx: CliContext): Promise<LoadedCommand[]
       const mod = await import(/* @vite-ignore */ pathToFileURL(abs).href);
       const candidate = mod.default ?? mod;
       // 完整契约校验（apiVersion 1 + 形状 + 保留名/重复名 + agent 元数据），
-      // 失败项带解释性错误进入 error 列表；旧版插件在此得到 apiVersion 指引。
+      // 失败项带解释性错误进入 error 列表。
       const acceptedNames = loaded
         .map((l) => l.command?.name)
         .filter((n): n is string => typeof n === "string");

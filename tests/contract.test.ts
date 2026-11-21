@@ -56,13 +56,13 @@ describe("validateLocalCommand（apiVersion 1 本地插件契约）", () => {
     expect(result.command?.name).toBe("hello");
   });
 
-  it("旧版插件（缺 apiVersion）给出解释性错误", () => {
+  it("缺少 apiVersion 的插件给出解释性错误", () => {
     const { apiVersion, ...legacy } = GOOD;
     const result = validateLocalCommand(legacy);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors.join()).toContain("apiVersion 必须为 1");
-      expect(result.errors.join()).toContain("旧版插件");
+      expect(result.errors.join()).toContain("声明 apiVersion: 1");
     }
   });
 
@@ -182,7 +182,7 @@ describe("validateLocalCommand（apiVersion 1 本地插件契约）", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("isCliCommand 是真正的 apiVersion 1 谓词（旧版插件返回 false）", () => {
+  it("isCliCommand 是真正的 apiVersion 1 谓词（未声明版本时返回 false）", () => {
     expect(isCliCommand({ name: "a", description: "b", register: () => {}, apiVersion: 1 })).toBe(true);
     expect(isCliCommand({ name: "a", description: "b", register: () => {} })).toBe(false);
     expect(isCliCommand({ name: "a", description: "b", register: () => {}, apiVersion: 2 })).toBe(false);
