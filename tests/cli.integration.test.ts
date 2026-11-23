@@ -51,8 +51,8 @@ afterEach(() => {
 });
 
 describe("CLI 集成", () => {
-  it("--version 为 0.7.11", () => {
-    expect(run(["--version"], newHome()).trim()).toBe("0.7.11");
+  it("--version 为 0.7.12", () => {
+    expect(run(["--version"], newHome()).trim()).toBe("0.7.12");
   });
 
   it("--help 列出内置命令与官方插件命令", () => {
@@ -162,7 +162,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const out = run(["xlmerge", "detect"], newHome(), { V_CLI_PLUGIN_RESOLVE_FROM: FIXTURE_ROOT });
     const payload = JSON.parse(out.split("\n")[0]);
     expect(payload.env).toEqual({
-      V_CLI_HOST_VERSION: "0.7.11",
+      V_CLI_HOST_VERSION: "0.7.12",
       V_CLI_PLUGIN_API: "1",
       V_CLI_INVOKED_BY: "v-cli",
     });
@@ -185,7 +185,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const home = newHome();
     const info = JSON.parse(run(["agent", "describe", "figma", "--json"], home));
     expect(info.package).toBe("@kevlns/figma-to-uprefab");
-    expect(info.version).toBe("0.1.7");
+    expect(info.version).toBe("0.2.0");
     expect(info.status).toBe(process.platform === "win32" ? "available" : "platform-mismatch");
     const docs = JSON.parse(run(["agent", "docs", "figma", "--json"], home));
     expect(docs.package).toBe(info.package);
@@ -199,7 +199,7 @@ describe("CLI 集成：官方插件命令拦截与转发（fixture 注入）", (
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
     const projectKey = home.replace(/\\/g, "/").toLowerCase();
     expect(config.projects[projectKey].uiSystem).toBe("UGUI");
-    expect(run(["figma", "--version"], home).trim()).toBe("0.1.7");
+    expect(run(["figma", "--version"], home).trim()).toBe("0.2.0");
   });
 
   it.skipIf(process.platform === "win32")("figma 命令在非 win32 平台拒绝路由", () => {
