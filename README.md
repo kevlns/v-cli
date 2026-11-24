@@ -169,7 +169,7 @@ skills/v-cli/references/project.md 从生成源和实际解析的插件清单生
 
 [架构规范](docs/registration-execution.md) · [身份矩阵](docs/execution-identities.md) · [协议解释](docs/provider-protocols.md) · [扩展与验证](docs/provider-development.md)
 
-MIT，见 [LICENSE](LICENSE)。问题反馈：[GitHub Issues](https://github.com/kevlns/v-cli/issues)。
+LGPLv3（含 Vant 应用开发例外），见 [LICENSE](LICENSE)。问题反馈：[GitHub Issues](https://github.com/kevlns/v-cli/issues)。
 
 ## 开发与验证
 
@@ -187,4 +187,4 @@ npm run test:package
 
 ## 许可与版权
 
-本工具采用 [MIT 许可](LICENSE)。Copyright © 2026 Vant <sl_kevln@163.com>。Vant 为工具集品牌；Figma、Unity、Steam、微信及其组件归各自权利人所有，第三方组件适用各自许可。
+本工具采用 [LGPLv3 及 Vant 应用开发例外](LICENSE)。Copyright © 2026 Vant <sl_kevln@163.com>。Vant 为工具集品牌；Figma、Unity、Steam、微信及其组件归各自权利人所有，第三方组件适用各自许可。

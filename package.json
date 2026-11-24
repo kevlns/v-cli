@@ -1,6 +1,6 @@
 {
   "name": "@kevlns/v-cli",
-  "version": "0.7.13",
+  "version": "0.8.0",
   "description": "提供工具发现、插件路由、工程绑定、结构化能力执行和操作证据管理。",
   "type": "module",
   "bin": {
@@ -39,7 +39,7 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "author": "Vant",
   "repository": {
     "type": "git",
@@ -58,11 +58,11 @@
     "toolbox"
   ],
   "dependencies": {
-    "@kevlns/art-workshop": "0.6.10",
-    "@kevlns/figma-to-uprefab": "0.2.1",
-    "@kevlns/ship-cli": "0.1.5",
-    "@kevlns/u-cli-mod": "0.3.4",
-    "@kevlns/xlmerge": "2.0.9",
+    "@kevlns/art-workshop": "0.7.0",
+    "@kevlns/figma-to-uprefab": "0.3.0",
+    "@kevlns/ship-cli": "0.2.0",
+    "@kevlns/u-cli-mod": "0.4.0",
+    "@kevlns/xlmerge": "3.0.0",
     "commander": "^12.1.0"
   },
   "devDependencies": {

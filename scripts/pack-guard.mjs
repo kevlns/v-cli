@@ -4,7 +4,7 @@
  * pack:guard — 发布内容护栏。
  *
  * 步骤：npm pack --dry-run --json（身份/文件清单）→ 真实 npm pack → tar 解列复核，
- * 断言：包身份 @kevlns/v-cli@0.7.13、必需文件齐全、禁止内容（src/tests/scripts/
+ * 断言：包身份 @kevlns/v-cli@0.8.0、必需文件齐全、禁止内容（src/tests/scripts/
  * 配置/源码/压缩包/node_modules）不出现、五个官方依赖精确固定、engines.node >= 20。
  * 任何断言失败 → 非零退出。
  */
@@ -16,7 +16,7 @@ import { pathToFileURL } from "node:url";
 const ROOT = process.cwd();
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
 const EXPECTED_NAME = "@kevlns/v-cli";
-const EXPECTED_VERSION = "0.7.13";
+const EXPECTED_VERSION = "0.8.0";
 const REQUIRED_FILES = [
   "dist/cli.mjs",
   "dist/sdk.mjs",
@@ -102,7 +102,7 @@ export function runPackGuard({ cwd = ROOT, keepTarball = false } = {}) {
     const packOut = npmExecFile(["pack", "--json", "--ignore-scripts"], { cwd, encoding: "utf-8" });
     const packed = JSON.parse(packOut)[0];
     const filename = packed.filename;
-    const expectedTarball = "kevlns-v-cli-0.7.13.tgz";
+    const expectedTarball = "kevlns-v-cli-0.8.0.tgz";
     if (filename !== expectedTarball) {
       errors.push(`tar 包名错误: ${filename}（期望 ${expectedTarball}）`);
     }
@@ -136,11 +136,11 @@ export function runPackGuard({ cwd = ROOT, keepTarball = false } = {}) {
     } else {
       const inner = JSON.parse(pkgOut.stdout);
       const pinned = {
-        "@kevlns/art-workshop": "0.6.10",
-        "@kevlns/ship-cli": "0.1.5",
-        "@kevlns/figma-to-uprefab": "0.2.1",
-        "@kevlns/xlmerge": "2.0.9",
-        "@kevlns/u-cli-mod": "0.3.4",
+        "@kevlns/art-workshop": "0.7.0",
+        "@kevlns/ship-cli": "0.2.0",
+        "@kevlns/figma-to-uprefab": "0.3.0",
+        "@kevlns/xlmerge": "3.0.0",
+        "@kevlns/u-cli-mod": "0.4.0",
       };
       for (const [dep, expect] of Object.entries(pinned)) {
         if (inner.dependencies?.[dep] !== expect) {

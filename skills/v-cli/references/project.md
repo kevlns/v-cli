@@ -20,7 +20,7 @@
 
 ### 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.7.13
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.8.0
 - 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
 - AI Agent 引导文档：`v-cli agent docs` 输出运行技能入口（`--json` 含 sha256/content）；
@@ -44,7 +44,7 @@
 
 ### @kevlns/art-workshop — 命令 `v-cli art …`
 
-**版本**：0.6.10
+**版本**：0.7.0
 **描述**：管理图片、视频与 Spine 骨骼动画制作。
 **平台**：win32, linux, darwin
 
@@ -255,7 +255,7 @@
 - `v-cli art spine capture --input <file>` 使用 WebGL 捕获指定姿势的 PNG 和对照图
 ### @kevlns/figma-to-uprefab — 命令 `v-cli figma …`
 
-**版本**：0.2.1
+**版本**：0.3.0
 **描述**：将 Figma 标记画板导出为源数据和图片，通过 Unity 转换器生成 UGUI 预制体。
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
@@ -278,7 +278,7 @@
 - `v-cli figma build [options]` 通过 Unity 批处理运行 C# 转换器；未安装、回执缺失或编辑器占用时拒绝执行。
 ### @kevlns/ship-cli — 命令 `v-cli ship …`
 
-**版本**：0.1.5
+**版本**：0.2.0
 **描述**：校验已构建的游戏产物，执行 Steam 上传、微信小游戏预览和开发版上传。
 **平台**：win32, linux, darwin
 
@@ -302,7 +302,7 @@
 - `v-cli ship wx open <target>` 在浏览器打开微信公众平台后台。
 ### @kevlns/u-cli-mod — 命令 `v-cli unity …`
 
-**版本**：0.3.4
+**版本**：0.4.0
 **描述**：按 Unity Editor 精确版本定位工具链，校验和安装 com.unity.pipeline，并执行工程命令。
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 
@@ -320,7 +320,7 @@
 - `v-cli unity cache clean [options]` 清理下载缓存与生成的适配包
 ### @kevlns/xlmerge — 命令 `v-cli xlmerge …`
 
-**版本**：2.0.9
+**版本**：3.0.0
 **描述**：处理 Git 中的 Excel 三方冲突，支持 Agent 根据项目规则裁决并写回，也支持浏览器逐项审阅。
 **平台**：darwin, linux, win32
 
@@ -351,4 +351,4 @@
 
 ## 许可与版权
 
-MIT。Copyright © 2026 Vant <sl_kevln@163.com>。
+LGPLv3（含 Vant 应用开发例外）。Copyright © 2026 Vant <sl_kevln@163.com>。
