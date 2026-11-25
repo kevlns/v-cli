@@ -14,6 +14,6 @@ describe("pack:guard 发布护栏", () => {
       timeout: 25000,
     });
     expect(out).toContain("pack:guard OK");
-    expect(out).toContain("@kevlns/v-cli@0.8.1");
+    expect(out).toContain("@kevlns/v-cli@0.8.2");
   });
 });
