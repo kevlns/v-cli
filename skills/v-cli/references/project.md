@@ -20,7 +20,7 @@
 
 ### 核心约定（v-cli 本体）
 
-- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.8.0
+- 环境要求 Node.js >= 20；v-cli 版本 @kevlns/v-cli@0.8.1
 - 命令分三类：builtin（内置）、local（~/.vant/tools/v-cli/commands/ 下的本地插件）、official（官方插件白名单）；
 - 单个命令的完整元数据用 `v-cli agent describe <命令名> --json` 查看
 - AI Agent 引导文档：`v-cli agent docs` 输出运行技能入口（`--json` 含 sha256/content）；
@@ -255,7 +255,7 @@
 - `v-cli art spine capture --input <file>` 使用 WebGL 捕获指定姿势的 PNG 和对照图
 ### @kevlns/figma-to-uprefab — 命令 `v-cli figma …`
 
-**版本**：0.3.0
+**版本**：0.3.1
 **描述**：将 Figma 标记画板导出为源数据和图片，通过 Unity 转换器生成 UGUI 预制体。
 **平台**：win32（仅 Windows 主机可用；非 Windows 上 v-cli 会拒绝路由）
 

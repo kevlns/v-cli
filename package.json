@@ -1,6 +1,6 @@
 {
   "name": "@kevlns/v-cli",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "提供工具发现、插件路由、工程绑定、结构化能力执行和操作证据管理。",
   "type": "module",
   "bin": {
@@ -59,7 +59,7 @@
   ],
   "dependencies": {
     "@kevlns/art-workshop": "0.7.0",
-    "@kevlns/figma-to-uprefab": "0.3.0",
+    "@kevlns/figma-to-uprefab": "0.3.1",
     "@kevlns/ship-cli": "0.2.0",
     "@kevlns/u-cli-mod": "0.4.0",
     "@kevlns/xlmerge": "3.0.0",

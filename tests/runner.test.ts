@@ -43,7 +43,7 @@ describe("runPluginBin（异步子进程运行器）", () => {
       V_CLI_PLUGIN_API: "1",
       V_CLI_INVOKED_BY: "v-cli",
     });
-    expect(VERSION).toBe("0.8.0");
+    expect(VERSION).toBe("0.8.1");
   });
 
   it("显式 env 覆盖注入值（overlay 语义）", async () => {
